@@ -4,11 +4,9 @@ import subprocess
 
 # Directory containing your audio book directories
 AUDIO_DIRS = [
-    "Quicksilver",
-    "TheInnovators",
-    "StartWithWhy",
-    "Kissinger",
-    "BenjaminFranklin",
+    "Book1",
+    "Book2",
+    "Book3",
 ]  # change to your folders
 
 
