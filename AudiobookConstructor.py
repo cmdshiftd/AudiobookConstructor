@@ -101,7 +101,7 @@ def generate_lists(audio_dir, original_files):
             end = start + get_duration(os.path.join(audio_dir, fn))
             # Use original filename for chapter title (preserve apostrophes)
             chapterstxt.write(
-                f"[CHAPTER]\nTIMEBASE=1/1000\nSTART={start}\nEND={end}\ntitle={fn.replace(" - ", ": ")}\n\n"
+                f"[CHAPTER]\nTIMEBASE=1/1000\nSTART={start}\nEND={end}\ntitle={fn.replace(' - ', ': ')}\n\n"
             )
             start = end
 
@@ -187,14 +187,12 @@ def add_metadata(audio_dir, chapters, output_file, concat_list_path, author=None
 
     # Attach cover to the output
     if cover_file:
-        chapter_command.extend(
-            ["-map", str(len(chapter_command) - 1), "-disposition:v", "attached_pic"]
-        )
+        chapter_command.extend(["-map", "2", "-disposition:v", "attached_pic"])
 
     print(f"\n Re-encoding{meta_insert}...")
     re_encode(concat_list_path, output_file)
 
-    # chapter_command.append(temp_final_file)
+    chapter_command.append(temp_final_file)
     result = subprocess.run(chapter_command, capture_output=True, text=True)
     if result.returncode != 0 or not os.path.exists(temp_final_file):
         print("FFmpeg failed to add chapters and/or cover:\n", result.stderr)
