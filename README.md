@@ -18,7 +18,7 @@ Install/build [FFmpeg](https://ffmpeg.org) for your platform.
 
 <br>
 
-__Ensure the audio files are named as the respective chapters and are within a directory named the book title. The book title directory must exist alongside AudiobookConstructor.py:__
+**Ensure the audio files are named as the respective chapters and are within a directory named the book title. The book title directory must exist alongside AudiobookConstructor.py:**
 
 _.../AudiobookConstructor/_<br>
 &emsp;&emsp;- _AudiobookConstructor.py_<br>
@@ -27,9 +27,11 @@ _.../AudiobookConstructor/_<br>
 &emsp;&emsp;&emsp;&emsp;- _Chapter 1 - The Boy Who Lived.mp3_<br>
 &emsp;&emsp;&emsp;&emsp;- _Chapter 2 - The Vanishing Glass.mp3_<br>
 &emsp;&emsp;&emsp;&emsp;- _..._<br>
-<br>
 
 If the books has an Introduction, Forward or Afterword, name them as follows:
 * Chapter 0.0 - Introduction
 * Chapter 0.1 - Forward
 * Chapter (Last+1) - Afterward
+<br><br>
+
+_**Note**: The processing time will often roughly equate to the length of the audio file._
