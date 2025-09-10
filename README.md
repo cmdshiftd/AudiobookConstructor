@@ -30,6 +30,6 @@ _.../AudiobookConstructor/_<br>
 <br>
 
 If the books has an Introduction, Forward or Afterword, name them as follows:
-* Chapter 0-0 - Introduction
-* Chapter 0-1 - Forward
+* Chapter 0.0 - Introduction
+* Chapter 0.1 - Forward
 * Chapter (Last+1) - Afterward
