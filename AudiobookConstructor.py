@@ -430,7 +430,7 @@ def main():
         print(f"File codec for {audio_dir} is {codec} and not supported.")
         sys.exit(1)
 
-    print(f"\n Completed conversion for {audio_dir.split('/')[-1]}\n\n\n")
+    print(f"\n Completed conversion for '{audio_dir.split('/')[-1]}'\n\n\n")
 
 
 if __name__ == "__main__":
