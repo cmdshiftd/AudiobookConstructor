@@ -3,7 +3,7 @@ Make audiobooks from existing individual audio files, as easy as Ab-C!
 
 
 ## Installation
-Download [FFmpeg](https://ffmpeg.org) and install/build for your platform.
+Install/build [FFmpeg](https://ffmpeg.org) for your platform.
 
 
 ## Usage
