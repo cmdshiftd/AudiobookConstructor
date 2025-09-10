@@ -14,6 +14,30 @@ def sort_chapters_numerically(s):
     ]
 
 
+def replace_special_characters(audio_dir, original_files):
+    for i, filename in enumerate(original_files):
+        if "'" in filename:
+            os.rename(
+                os.path.join(audio_dir, filename),
+                os.path.join(audio_dir, filename.replace("'", "’")),
+            )
+            original_files[i] = filename.replace("'", "’")
+        if "\\" in filename:
+            os.rename(
+                os.path.join(audio_dir, filename),
+                os.path.join(audio_dir, filename.replace("\\", "-")),
+            )
+            original_files[i] = filename.replace("\\", "-")
+        if "%" in filename:
+            os.rename(
+                os.path.join(audio_dir, filename),
+                os.path.join(audio_dir, filename.replace("%", "pc")),
+            )
+            original_files[i] = filename.replace("%", "pc")
+
+    return original_files
+
+
 # Function to get audio codec of a file using ffprobe
 def get_codec(audio_dir, file_path):
     result = subprocess.run(
@@ -187,7 +211,18 @@ def add_metadata(audio_dir, chapters, output_file, concat_list_path, author=None
 
     # Attach cover to the output
     if cover_file:
-        chapter_command.extend(["-map", "2", "-disposition:v", "attached_pic"])
+        chapter_command.extend(
+            [
+                "-map",
+                "0:a",  # map the audio
+                "-map",
+                "2",  # map the cover image
+                "-c:v",
+                "mjpeg",  # encode cover as MJPEG
+                "-disposition:v",
+                "attached_pic",
+            ]
+        )
 
     print(f"\n Re-encoding{meta_insert}...")
     re_encode(concat_list_path, output_file)
@@ -250,7 +285,9 @@ def convert_mp3(
         with open(
             os.path.join(audio_dir, "temp_concat_list.txt"), "a", encoding="utf-8"
         ) as templist:
-            templist.write(f"file '{os.path.abspath(temp_file).replace("'", "''")}'\n")
+            # Wrap path in single quotes, escape any existing single quotes for FFmpeg concat
+            safe_path = os.path.abspath(temp_file).replace("'", "'\\''")
+            templist.write(f"file '{safe_path}'\n")
 
         command = [
             "ffmpeg",
@@ -289,7 +326,7 @@ def convert_mp3(
             eta_str = f"{eta_minutes}m {eta_seconds}s"
 
         # Print progress after every chapter
-        if verbose:
+        if verbose and int(percentage) != 100:
             print(f"   Progress: {percentage:.1f}%\t{base_name}\n    ETA: ~{eta_str}")
         # Print progress every N%
         elif int(percentage) % num == 0 and int(percentage) != 100:
@@ -339,6 +376,9 @@ def main():
     )
     if not original_files:
         print("No audio files found.")
+
+    # Replace single quotes in filenames with backticks to prevent FFmpeg concat issues
+    original_files = replace_special_characters(audio_dir, original_files)
 
     filelist, chapters, total_duration, concat_list_path = generate_lists(
         audio_dir, original_files
