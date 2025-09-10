@@ -61,16 +61,17 @@ def get_duration(file_path):
 # Write concat list file with absolute paths
 def write_concat_list(audio_dir, temp_files):
     concat_list_path = os.path.join(audio_dir, "temp_concat_list.txt")
-    with open(concat_list_path, "w") as f:
+    with open(concat_list_path, "w") as concatlist:
         for temp_file in temp_files:
             if not os.path.exists(temp_file):
                 print("Error: temp file not found:", temp_file)
                 sys.exit(1)
 
             # Wrap path in single quotes, escaping existing single quotes
-            safe_path = temp_file.replace("'", "'\\''")
             # Additional special characters haven't yet been tested inc. ", &
-            f.write(f"file '{safe_path}'\n")
+            concatlist.write(
+                f"file '{os.path.abspath(temp_file).replace("'", "''")}'\n"
+            )
 
     return concat_list_path
 
@@ -250,9 +251,8 @@ def convert_mp3(
         # Append to concat list
         with open(
             os.path.join(audio_dir, "temp_concat_list.txt"), "a", encoding="utf-8"
-        ) as f:
-            safe_path = os.path.abspath(temp_file).replace("'", "'\\''")
-            f.write(f"file '{safe_path}'\n")
+        ) as templist:
+            templist.write(f"file '{os.path.abspath(temp_file).replace("'", "''")}'\n")
 
         command = [
             "ffmpeg",
