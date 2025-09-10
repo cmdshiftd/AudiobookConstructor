@@ -1,11 +1,13 @@
+#!/usr/bin/env python3
 import os
+import re
 import subprocess
 import sys
 import time
 
 
 # Function to get audio codec of a file using ffprobe
-def get_codec(file_path):
+def get_codec(audio_dir, file_path):
     result = subprocess.run(
         [
             "ffprobe",
@@ -21,6 +23,9 @@ def get_codec(file_path):
         ],
         capture_output=True,
         text=True,
+    )
+    print(
+        f"\n Converting {audio_dir.split('/')[-1]} ({result.stdout.strip()}) -> {audio_dir.split('/')[-1]}/{audio_dir.split('/')[-1]}.m4b..."
     )
     return result.stdout.strip()
 
@@ -45,29 +50,147 @@ def get_duration(file_path):
     return int(float(result.stdout.strip()) * 1000)
 
 
+# Write concat list file with absolute paths
+def write_concat_list(audio_dir, temp_files):
+    concat_list_path = os.path.join(audio_dir, "temp_concat_list.txt")
+    with open(concat_list_path, "w") as f:
+        for temp_file in temp_files:
+            if not os.path.exists(temp_file):
+                print("Error: temp file not found:", temp_file)
+                sys.exit(1)
+
+            # Wrap path in single quotes, escaping existing single quotes
+            safe_path = temp_file.replace("'", "'\\''")
+            f.write(f"file '{safe_path}'\n")
+
+    return concat_list_path
+
+
+# Concatenate with re-encode (safer than copy)
+def re_encode(concat_list_path, output_file):
+    concat_command = [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",  # only show real errors here
+        "-y",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        concat_list_path,
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        output_file,
+    ]
+    subprocess.run(concat_command, check=True)
+
+
+# Add chapters metadata into a new file (ffmpeg cannot edit in-place)
+def add_metatdata(audio_dir, chapters, output_file, author=None):
+    final_file = os.path.join(audio_dir, f"{os.path.basename(audio_dir)}.m4b")
+    temp_final_file = os.path.join(
+        audio_dir, f"{os.path.basename(audio_dir)}_with_chapters.m4b"
+    )
+    chapter_command = [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-i",
+        final_file,
+        "-i",
+        chapters,
+        "-map_metadata",
+        "1",
+        "-c:a",
+        "copy",
+        "-metadata",
+        f"title={os.path.basename(audio_dir)}",
+        "-metadata",
+        f"album={os.path.basename(audio_dir)}",
+        "-metadata",
+        f"author={author}",
+        "-metadata",
+        f"artist={author}",
+    ]
+
+    # Detect and include cover image (if found)
+    cover_file = None
+    for ext in (".jpg", ".jpeg", ".png"):
+        for f in os.listdir(audio_dir):
+            if f.startswith(os.path.basename(audio_dir)) and f.lower().endswith(ext):
+                cover_file = os.path.join(audio_dir, f)
+                break
+        if cover_file:
+            break
+    if cover_file:
+        chapter_command.extend(
+            ["-i", cover_file, "-map", "2", "-disposition:v", "attached_pic"]
+        )
+
+    chapter_command.append(temp_final_file)
+    result = subprocess.run(chapter_command, capture_output=True, text=True)
+    if result.returncode != 0 or not os.path.exists(temp_final_file):
+        print("FFmpeg failed to add chapters and/or cover:\n", result.stderr)
+        sys.exit(1)
+    os.replace(temp_final_file, output_file)
+
+
+# Cleanup temporary files
+def clean_up(temp_files, concat_list_path):
+    for temp_file in temp_files:
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+    if os.path.exists(concat_list_path):
+        os.remove(concat_list_path)
+
+
 # Convert mp3 files to m4a, then concatenate with chapters metadata into m4b
-def convert_mp3(filelist, chapters, audio_dir, total_duration):
-    files = []
+def convert_mp3(
+    author,
+    filelist,
+    chapters,
+    audio_dir,
+    total_duration,
+    files,
+    temp_files,
+    cumulative_duration,
+    start_time,
+    output_file,
+    concat_list_path,
+):
+    # Convert each mp3 file to m4a with AAC codec and 128k bitrate
     with open(filelist, "r") as f:
         for line in f:
-            if line.startswith("file "):
-                path = line.strip().split("file ")[1].strip("'")
-                files.append(path)
+            path = line.strip()
+            # Remove surrounding quotes if present
+            if path.startswith("'") and path.endswith("'"):
+                path = path[1:-1]
+            elif path.startswith('"') and path.endswith('"'):
+                path = path[1:-1]
+            files.append(path)
 
-    temp_files = []
-    cumulative_duration = 0
-    start_time = time.time()
-
-    # Convert each mp3 file to m4a with AAC codec and 128k bitrate
     for _, input_file in enumerate(files, 1):
         duration = get_duration(input_file)
         base_name = os.path.splitext(os.path.basename(input_file))[0]
         temp_file = os.path.join(audio_dir, f"{base_name}.m4a")
 
-        # Removing temp file if it already exists
+        # Remove temp file if exists
         if os.path.exists(temp_file):
             os.remove(temp_file)
         temp_files.append(temp_file)
+
+        # Append to concat list
+        with open(
+            os.path.join(audio_dir, "temp_concat_list.txt"), "a", encoding="utf-8"
+        ) as f:
+            safe_path = os.path.abspath(temp_file).replace("'", "'\\''")
+            f.write(f"file '{safe_path}'\n")
 
         command = [
             "ffmpeg",
@@ -85,9 +208,14 @@ def convert_mp3(filelist, chapters, audio_dir, total_duration):
             "2",
             temp_file,
         ]
-        subprocess.run(
-            command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
+        result = subprocess.run(command, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"\nFFmpeg failed for {input_file}:\n{result.stderr}")
+            sys.exit(1)
+
+        if not os.path.exists(temp_file):
+            print("Error: Failed to create temp file:", temp_file)
+            sys.exit(1)
 
         # Show progress
         cumulative_duration += duration
@@ -98,136 +226,126 @@ def convert_mp3(filelist, chapters, audio_dir, total_duration):
             eta_seconds = int(estimated_total_time - elapsed_time)
             eta_minutes = eta_seconds // 60
             eta_seconds = eta_seconds % 60
-            if eta_minutes == 0:
-                eta_str = f"{eta_minutes}m"
-            if eta_seconds == 0:
-                eta_str = f"{eta_minutes}m"
             eta_str = f"{eta_minutes}m {eta_seconds}s"
-        else:
-            eta_str = "calculating..."
 
-        print(
-            f"\n  - Progress: {percentage:.1f}%\t{base_name}\n    ~{eta_str} remaining"
-        )
+        # Print progress every 10%
+        if int(percentage) % 10 == 0 and int(percentage) != 100:
+            print(f"  - Progress: {percentage:.1f}%\t{base_name}\n    ETA: ~{eta_str}")
 
-    # Write concat list file with absolute paths
-    concat_list_path = os.path.join(audio_dir, "temp_concat_list.txt")
-    with open(concat_list_path, "w") as f:
-        for temp_file in temp_files:
-            abs_path = os.path.abspath(temp_file)
-            f.write(f"file '{abs_path}'\n")
-
-    output_file = os.path.join(audio_dir, f"{os.path.basename(audio_dir)}.m4b")
-
-    # Concatenate with re-encode (safer than copy)
-    concat_command = [
-        "ffmpeg",
-        "-hide_banner",
-        "-y",
-        "-f",
-        "concat",
-        "-safe",
-        "0",
-        "-i",
-        concat_list_path,
-        "-c:a",
-        "aac",
-        "-b:a",
-        "128k",
-        output_file,
-    ]
-    subprocess.run(concat_command, check=True)
-
-    # Add chapters metadata in a second pass
-    chapter_command = [
-        "ffmpeg",
-        "-hide_banner",
-        "-y",
-        "-i",
-        output_file,
-        "-i",
-        chapters,
-        "-map_metadata",
-        "1",
-        "-c:a",
-        "copy",
-        output_file,
-    ]
-    subprocess.run(chapter_command, check=True)
-
-    # Cleanup temporary files
-    for temp_file in temp_files:
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
-    if os.path.exists(concat_list_path):
-        os.remove(concat_list_path)
-
-    print(f"\n  - Progress 100.0%: {os.path.basename(audio_dir)}.m4b completed\n")
+    print(f"\n Organising chapters and adding cover...")
+    # Re-encode concatenated file
+    re_encode(concat_list_path, output_file)
+    add_metatdata(audio_dir, chapters, output_file, author)
+    clean_up(temp_files, concat_list_path)
 
 
 def main():
     # Clear the terminal screen before starting
     subprocess.Popen(["clear"])
-    time.sleep(0.2)
+    time.sleep(0.1)
 
-    if len(sys.argv) < 2:
-        print("Usage: python AudiobookMaker.py <audiobook_directory>")
+    if len(sys.argv) < 3:
+        print("Usage: python AudiobookConstructor.py <audiobook_directory> <author>")
         sys.exit(1)
 
     audio_dir = sys.argv[1]
-
+    author = sys.argv[2]
     # Check if the provided directory exists
     if not os.path.isdir(audio_dir):
         print(f"Error: Directory '{audio_dir}' does not exist.")
         sys.exit(1)
 
+    print(
+        """
+        Ensure the file names are the correct respective chapter names e.g.:
+             - Chapter 1 - The Boy Who Lived
+             - Chapter 2 - The Vanishing Glass
+             - Chapter 3 - The Letter from No One
+            ...
+    """
+    )
+    time.sleep(10)
+    subprocess.Popen(["clear"])
+    time.sleep(0.1)
+
+    # Define variables
     filelist = os.path.join(audio_dir, "filelist.txt")
     chapters = os.path.join(audio_dir, "chapters.txt")
+
+    files = []
+    temp_files = []
+    cumulative_duration = 0
+    start_time = time.time()
+    output_file = os.path.join(audio_dir, f"{os.path.basename(audio_dir)}.m4b")
+
+    def natural_sort_key(s):
+        return [
+            int(text) if text.isdigit() else text.lower()
+            for text in re.split(r"(\d+)", s)
+        ]
+
     # List all audio files with supported extensions in directory
-    files = sorted(
+    original_files = sorted(
         [
             f
             for f in os.listdir(audio_dir)
             if f.lower().endswith((".mp3", ".m4a", ".aac"))
-        ]
+        ],
+        key=natural_sort_key,
     )
-    if not files:
+    if not original_files:
         print("No audio files found.")
-        return
 
-    # Write absolute paths of audio files to filelist.txt for ffmpeg concat input
+    # Write relative paths of audio files to filelist.txt; write_concat_list will handle quotes
     with open(filelist, "w") as f:
-        for fn in files:
-            f.write(f"file '{os.path.abspath(os.path.join(audio_dir, fn))}'\n")
+        for fn in original_files:
+            f.write(f"{os.path.join(audio_dir, fn)}\n")
 
-    # Generate chapters.txt metadata file with start/end times for each file
+    total_duration = sum(
+        get_duration(os.path.join(audio_dir, fn)) for fn in original_files
+    )
+    concat_list_path = os.path.join(audio_dir, "temp_concat_list.txt")
+    with open(concat_list_path, "w", encoding="utf-8") as f:
+        f.write("")
+
+    # Generate chapters.txt metadata file with start/end times for each original file
     start = 0
     with open(chapters, "w") as f:
         f.write(";FFMETADATA1\n")
-        for i, fn in enumerate(files, 1):
+        for i, fn in enumerate(original_files, 1):
             dur = get_duration(os.path.join(audio_dir, fn))
             end = start + dur
             f.write("[CHAPTER]\n")
             f.write("TIMEBASE=1/1000\n")
             f.write(f"START={start}\n")
             f.write(f"END={end}\n")
+            # Use original filename for chapter title (preserve apostrophes)
             f.write(f"title=Chapter {i}: {fn}\n\n")
             start = end
 
-    # Detect codec of last file for conversion decision
-    codec = get_codec(os.path.join(audio_dir, fn))
-    print(
-        f"Converting {audio_dir.split('/')[-1]} ({codec}) to {audio_dir.split('/')[-1]}/{audio_dir.split('/')[-1]}.m4b..."
-    )
-    total_duration = sum(get_duration(os.path.join(audio_dir, fn)) for fn in files)
+    # Detect codec for conversion decision
+    codec = get_codec(audio_dir, os.path.join(audio_dir, original_files[-1]))
     if codec == "mp3":
-        convert_mp3(filelist, chapters, audio_dir, total_duration)
+        convert_mp3(
+            author,
+            filelist,
+            chapters,
+            audio_dir,
+            total_duration,
+            files,
+            temp_files,
+            cumulative_duration,
+            start_time,
+            output_file,
+            concat_list_path,
+        )
     elif codec == "aac":
         pass
     else:
         print(f"File codec for {audio_dir} is {codec} and not supported.")
         sys.exit(1)
-    print(f"\n\n\n\n\n\nCompleted conversion for: {audio_dir.split('/')[-1]}\n\n")
+
+    print(f" Completed conversion for {audio_dir.split('/')[-1]}\n\n\n")
 
 
 if __name__ == "__main__":
