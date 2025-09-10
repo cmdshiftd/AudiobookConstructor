@@ -299,19 +299,6 @@ def main():
         print(f"Error: Directory '{audio_dir}' does not exist.")
         sys.exit(1)
 
-    print(
-        """
-        Ensure the file names are the correct respective chapter names e.g.:
-             - Chapter 1 - The Boy Who Lived
-             - Chapter 2 - The Vanishing Glass
-             - Chapter 3 - The Letter from No One
-            ...
-    """
-    )
-    time.sleep(10)
-    subprocess.Popen(["clear"])
-    time.sleep(0.1)
-
     files = []
     temp_files = []
     cumulative_duration = 0
