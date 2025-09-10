@@ -218,6 +218,7 @@ def convert_mp3(
                 path = path[1:-1]
             files.append(path)
 
+    num = random.randint(8, 12)
     for _, input_file in enumerate(files, 1):
         duration = get_duration(input_file)
         base_name = os.path.splitext(os.path.basename(input_file))[0]
@@ -272,7 +273,7 @@ def convert_mp3(
             eta_str = f"{eta_minutes}m {eta_seconds}s"
 
         # Print progress every N%
-        if int(percentage) % random.randint(7, 13) == 0 and int(percentage) != 100:
+        if int(percentage) % num == 0 and int(percentage) != 100:
             print(f"   Progress: {percentage:.1f}%\t{base_name}\n    ETA: ~{eta_str}")
 
     print(f"\n Organising chapters and adding cover...")
