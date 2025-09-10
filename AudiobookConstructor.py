@@ -81,9 +81,9 @@ def generate_lists(audio_dir, original_files):
     chapters = os.path.join(audio_dir, "chapters.txt")
 
     # Write relative paths of audio files to filelist.txt; write_concat_list will handle quotes
-    with open(filelist, "w") as f:
+    with open(filelist, "w") as filelisttxt:
         for fn in original_files:
-            f.write(f"{os.path.join(audio_dir, fn)}\n")
+            filelisttxt.write(f"{os.path.join(audio_dir, fn)}\n")
 
     total_duration = sum(
         get_duration(os.path.join(audio_dir, fn)) for fn in original_files
@@ -94,17 +94,14 @@ def generate_lists(audio_dir, original_files):
 
     # Generate chapters.txt metadata file with start/end times for each original file
     start = 0
-    with open(chapters, "w") as f:
-        f.write(";FFMETADATA1\n")
-        for i, fn in enumerate(original_files, 1):
-            dur = get_duration(os.path.join(audio_dir, fn))
-            end = start + dur
-            f.write("[CHAPTER]\n")
-            f.write("TIMEBASE=1/1000\n")
-            f.write(f"START={start}\n")
-            f.write(f"END={end}\n")
+    with open(chapters, "w") as chapterstxt:
+        chapterstxt.write(";FFMETADATA1\n")
+        for _, fn in enumerate(original_files, 1):
+            end = start + get_duration(os.path.join(audio_dir, fn))
             # Use original filename for chapter title (preserve apostrophes)
-            f.write(f"title=Chapter {i}: {fn}\n\n")
+            chapterstxt.write(
+                f"[CHAPTER]\nTIMEBASE=1/1000\nSTART={start}\nEND={end}\ntitle={fn.replace(" - ", ": ")}\n\n"
+            )
             start = end
 
     return filelist, chapters, total_duration, concat_list_path
