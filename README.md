@@ -22,7 +22,7 @@ _.../AudiobookConstructor/_<br>
 &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;- _Chapter 3 - The Keeper of the Keys.mp3_<br>
 &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;- _..._<br>
 &emsp;&emsp;&emsp;&emsp;- _AudiobookConstructor.py_<br>
-<br><br>
+<br>
 
 If the books has an Introduction, Forward or Afterword, name them as follows:
 * Chapter 0-0 - Introduction
