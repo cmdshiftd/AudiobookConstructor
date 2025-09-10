@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import random
 import re
 import subprocess
 import sys
@@ -270,16 +271,15 @@ def convert_mp3(
             eta_seconds = eta_seconds % 60
             eta_str = f"{eta_minutes}m {eta_seconds}s"
 
-        # Print progress every 10%
-        if int(percentage) % 10 == 0 and int(percentage) != 100:
+        # Print progress every N%
+        num = random.randint(7, 13)
+        if int(percentage) % num == 0 and int(percentage) != 100:
             print(f"   Progress: {percentage:.1f}%\t{base_name}\n    ETA: ~{eta_str}")
 
     print(f"\n Organising chapters and adding cover...")
-    # Re-encode concatenated file
     re_encode(concat_list_path, output_file)
     add_metatdata(audio_dir, chapters, output_file, author)
     clean_up(temp_files, concat_list_path)
-    # print()
 
 
 def main():
