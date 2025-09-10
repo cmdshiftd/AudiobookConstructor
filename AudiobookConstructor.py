@@ -233,6 +233,7 @@ def convert_mp3(
             print(f"  - Progress: {percentage:.1f}%\t{base_name}\n    ETA: ~{eta_str}")
 
     print(f"\n Organising chapters and adding cover...")
+    print()
     # Re-encode concatenated file
     re_encode(concat_list_path, output_file)
     add_metatdata(audio_dir, chapters, output_file, author)
