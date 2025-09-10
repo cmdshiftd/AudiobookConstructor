@@ -1,5 +1,6 @@
 # AudiobookConstructor
-Maker audiobooks from existing individual audio files.
+Make audiobooks from existing individual audio files, as easy as Ab-C!
+
 
 ## Installation
 Download [FFmpeg](https://ffmpeg.org) and install/build for your platform.
@@ -7,11 +8,11 @@ Download [FFmpeg](https://ffmpeg.org) and install/build for your platform.
 
 ## Usage
 
-`python3 AudiobookConstructor.py`
+`python3 AudiobookConstructor.py <audiobook_directory/title> <author>`
 
 <br>
 
-__Ensure you have your audio files in a directory, and that directory is alongside AudiobookConstructor.py and the file names are the correct respective Chapter names__
+__Ensure the audio files are named as the respective chapters and are within a directory named the book title. The book title directory must exist alongside AudiobookConstructor.py:__
 
 _.../AudiobookConstructor/_<br>
 &emsp;&emsp;&emsp;&emsp;- _Harry Potter and the Philosopher's Stone/_<br>
