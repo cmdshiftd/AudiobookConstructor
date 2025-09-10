@@ -5,6 +5,7 @@ import re
 import subprocess
 import sys
 import time
+import zipfile
 
 
 # Sort chapters into nermerical order
@@ -236,14 +237,32 @@ def add_metadata(audio_dir, chapters, output_file, concat_list_path, author=None
 
 
 # Cleanup temporary files
-def clean_up(filelist, temp_files, concat_list_path):
+def clean_up(filelist, temp_files, concat_list_path, codec):
+    # Archive all original files
+    audio_dir = os.path.dirname(filelist)
+    archive_file = os.path.join(
+        audio_dir, f"{os.path.basename(audio_dir)}_originals.zip"
+    )
+    with zipfile.ZipFile(archive_file, "w", zipfile.ZIP_DEFLATED) as archive:
+        with open(filelist, "r", encoding="utf-8") as f:
+            for line in f:
+                if os.path.exists(line.strip()) and (
+                    line.strip().lower().endswith(f".{codec}")
+                    or line.strip().lower().endswith(".jpg")
+                    or line.strip().lower().endswith(".jpeg")
+                    or line.strip().lower().endswith(".png")
+                ):
+                    archive.write(line.strip(), arcname=os.path.basename(line.strip()))
+                    os.remove(line.strip())  # delete original after adding to archive
+
+    # Delete temp and txt files
     for temp_file in temp_files:
         if os.path.exists(temp_file):
             os.remove(temp_file)
     if os.path.exists(concat_list_path):
         os.remove(concat_list_path)
-    # archive all files in filelist.txt & jpg
-    # delete filelist.txt and chapters.txt
+    os.remove(os.path.join(audio_dir, "filelist.txt"))
+    os.remove(os.path.join(audio_dir, "chapters.txt"))
 
 
 # Convert mp3 files to m4a, then concatenate with chapters metadata into m4b
@@ -259,6 +278,7 @@ def convert_mp3(
     start_time,
     output_file,
     concat_list_path,
+    codec,
     verbose,
 ):
     # Convert each mp3 file to m4a with AAC codec and 128k bitrate
@@ -335,7 +355,7 @@ def convert_mp3(
             print(f"   Progress: {percentage:.1f}%\t{base_name}\n    ETA: ~{eta_str}")
 
     add_metadata(audio_dir, chapters, output_file, concat_list_path, author)
-    clean_up(filelist, temp_files, concat_list_path)
+    clean_up(filelist, temp_files, concat_list_path, codec)
 
 
 def main():
@@ -401,6 +421,7 @@ def main():
             start_time,
             output_file,
             concat_list_path,
+            codec,
             verbose,
         )
     elif codec == "aac":
