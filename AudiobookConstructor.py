@@ -33,7 +33,7 @@ def get_codec(audio_dir, file_path):
         text=True,
     )
     print(
-        f"\n Converting {audio_dir.split('/')[-1]} ({result.stdout.strip()}) -> {audio_dir.split('/')[-1]}/{audio_dir.split('/')[-1]}.m4b..."
+        f"\n Converting {audio_dir.split('/')[-1]} ({result.stdout.strip()}) -> {audio_dir.split('/')[-1]}.m4b..."
     )
     return result.stdout.strip()
 
@@ -133,7 +133,7 @@ def re_encode(concat_list_path, output_file):
 
 
 # Add chapters metadata into a new file (ffmpeg cannot edit in-place)
-def add_metatdata(audio_dir, chapters, output_file, author=None):
+def add_metadata(audio_dir, chapters, output_file, concat_list_path, author=None):
     final_file = os.path.join(audio_dir, f"{os.path.basename(audio_dir)}.m4b")
     temp_final_file = os.path.join(
         audio_dir, f"{os.path.basename(audio_dir)}_with_chapters.m4b"
@@ -164,6 +164,7 @@ def add_metatdata(audio_dir, chapters, output_file, author=None):
 
     # Detect and include cover image (if found)
     cover_file = None
+    meta_insert = "and organising chapters"
     for ext in (".jpg", ".jpeg", ".png"):
         for f in os.listdir(audio_dir):
             if f.startswith(os.path.basename(audio_dir)) and f.lower().endswith(ext):
@@ -175,6 +176,10 @@ def add_metatdata(audio_dir, chapters, output_file, author=None):
         chapter_command.extend(
             ["-i", cover_file, "-map", "2", "-disposition:v", "attached_pic"]
         )
+        meta_insert = ", organising chapters and adding cover"
+
+    print(f"\n Re-encoding{meta_insert}...")
+    re_encode(concat_list_path, output_file)
 
     chapter_command.append(temp_final_file)
     result = subprocess.run(chapter_command, capture_output=True, text=True)
@@ -206,6 +211,7 @@ def convert_mp3(
     start_time,
     output_file,
     concat_list_path,
+    verbose,
 ):
     # Convert each mp3 file to m4a with AAC codec and 128k bitrate
     with open(filelist, "r") as f:
@@ -272,13 +278,13 @@ def convert_mp3(
             eta_seconds = eta_seconds % 60
             eta_str = f"{eta_minutes}m {eta_seconds}s"
 
+        if verbose:
+            print(f"Converted: {os.path.basename(input_file)}")
         # Print progress every N%
-        if int(percentage) % num == 0 and int(percentage) != 100:
+        elif int(percentage) % num == 0 and int(percentage) != 100:
             print(f"   Progress: {percentage:.1f}%\t{base_name}\n    ETA: ~{eta_str}")
 
-    print(f"\n Organising chapters and adding cover...")
-    re_encode(concat_list_path, output_file)
-    add_metatdata(audio_dir, chapters, output_file, author)
+    add_metadata(audio_dir, chapters, output_file, concat_list_path, author)
     clean_up(temp_files, concat_list_path)
 
 
@@ -289,7 +295,9 @@ def main():
 
     # Verify command syntax
     if len(sys.argv) < 3:
-        print("Usage: python AudiobookConstructor.py <audiobook_directory> <author>")
+        print(
+            "Usage: python AudiobookConstructor.py <audiobook_directory> <author> [--verbose]"
+        )
         sys.exit(1)
 
     audio_dir = sys.argv[1]
@@ -298,6 +306,10 @@ def main():
     if not os.path.isdir(audio_dir):
         print(f"Error: Directory '{audio_dir}' does not exist.")
         sys.exit(1)
+
+    verbose = False
+    if "--verbose" in sys.argv:
+        verbose = True
 
     files = []
     temp_files = []
@@ -336,6 +348,7 @@ def main():
             start_time,
             output_file,
             concat_list_path,
+            verbose,
         )
     elif codec == "aac":
         pass
