@@ -236,12 +236,14 @@ def add_metadata(audio_dir, chapters, output_file, concat_list_path, author=None
 
 
 # Cleanup temporary files
-def clean_up(temp_files, concat_list_path):
+def clean_up(filelist, temp_files, concat_list_path):
     for temp_file in temp_files:
         if os.path.exists(temp_file):
             os.remove(temp_file)
     if os.path.exists(concat_list_path):
         os.remove(concat_list_path)
+    # archive all files in filelist.txt & jpg
+    # delete filelist.txt and chapters.txt
 
 
 # Convert mp3 files to m4a, then concatenate with chapters metadata into m4b
@@ -333,7 +335,7 @@ def convert_mp3(
             print(f"   Progress: {percentage:.1f}%\t{base_name}\n    ETA: ~{eta_str}")
 
     add_metadata(audio_dir, chapters, output_file, concat_list_path, author)
-    clean_up(temp_files, concat_list_path)
+    clean_up(filelist, temp_files, concat_list_path)
 
 
 def main():
