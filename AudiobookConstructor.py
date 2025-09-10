@@ -6,6 +6,13 @@ import sys
 import time
 
 
+# Sort chapters into nermerical order
+def sort_chapters_numerically(s):
+    return [
+        int(text) if text.isdigit() else text.lower() for text in re.split(r"(\d+)", s)
+    ]
+
+
 # Function to get audio codec of a file using ffprobe
 def get_codec(audio_dir, file_path):
     result = subprocess.run(
@@ -64,6 +71,41 @@ def write_concat_list(audio_dir, temp_files):
             f.write(f"file '{safe_path}'\n")
 
     return concat_list_path
+
+
+# Write filelist.txt and chapters.txt
+def generate_lists(audio_dir, original_files):
+    filelist = os.path.join(audio_dir, "filelist.txt")
+    chapters = os.path.join(audio_dir, "chapters.txt")
+
+    # Write relative paths of audio files to filelist.txt; write_concat_list will handle quotes
+    with open(filelist, "w") as f:
+        for fn in original_files:
+            f.write(f"{os.path.join(audio_dir, fn)}\n")
+
+    total_duration = sum(
+        get_duration(os.path.join(audio_dir, fn)) for fn in original_files
+    )
+    concat_list_path = os.path.join(audio_dir, "temp_concat_list.txt")
+    with open(concat_list_path, "w", encoding="utf-8") as f:
+        f.write("")
+
+    # Generate chapters.txt metadata file with start/end times for each original file
+    start = 0
+    with open(chapters, "w") as f:
+        f.write(";FFMETADATA1\n")
+        for i, fn in enumerate(original_files, 1):
+            dur = get_duration(os.path.join(audio_dir, fn))
+            end = start + dur
+            f.write("[CHAPTER]\n")
+            f.write("TIMEBASE=1/1000\n")
+            f.write(f"START={start}\n")
+            f.write(f"END={end}\n")
+            # Use original filename for chapter title (preserve apostrophes)
+            f.write(f"title=Chapter {i}: {fn}\n\n")
+            start = end
+
+    return filelist, chapters, total_duration, concat_list_path
 
 
 # Concatenate with re-encode (safer than copy)
@@ -230,14 +272,14 @@ def convert_mp3(
 
         # Print progress every 10%
         if int(percentage) % 10 == 0 and int(percentage) != 100:
-            print(f"  - Progress: {percentage:.1f}%\t{base_name}\n    ETA: ~{eta_str}")
+            print(f"   Progress: {percentage:.1f}%\t{base_name}\n    ETA: ~{eta_str}")
 
     print(f"\n Organising chapters and adding cover...")
-    print()
     # Re-encode concatenated file
     re_encode(concat_list_path, output_file)
     add_metatdata(audio_dir, chapters, output_file, author)
     clean_up(temp_files, concat_list_path)
+    # print()
 
 
 def main():
@@ -245,6 +287,7 @@ def main():
     subprocess.Popen(["clear"])
     time.sleep(0.1)
 
+    # Verify command syntax
     if len(sys.argv) < 3:
         print("Usage: python AudiobookConstructor.py <audiobook_directory> <author>")
         sys.exit(1)
@@ -269,21 +312,11 @@ def main():
     subprocess.Popen(["clear"])
     time.sleep(0.1)
 
-    # Define variables
-    filelist = os.path.join(audio_dir, "filelist.txt")
-    chapters = os.path.join(audio_dir, "chapters.txt")
-
     files = []
     temp_files = []
     cumulative_duration = 0
     start_time = time.time()
     output_file = os.path.join(audio_dir, f"{os.path.basename(audio_dir)}.m4b")
-
-    def natural_sort_key(s):
-        return [
-            int(text) if text.isdigit() else text.lower()
-            for text in re.split(r"(\d+)", s)
-        ]
 
     # List all audio files with supported extensions in directory
     original_files = sorted(
@@ -292,37 +325,14 @@ def main():
             for f in os.listdir(audio_dir)
             if f.lower().endswith((".mp3", ".m4a", ".aac"))
         ],
-        key=natural_sort_key,
+        key=sort_chapters_numerically,
     )
     if not original_files:
         print("No audio files found.")
 
-    # Write relative paths of audio files to filelist.txt; write_concat_list will handle quotes
-    with open(filelist, "w") as f:
-        for fn in original_files:
-            f.write(f"{os.path.join(audio_dir, fn)}\n")
-
-    total_duration = sum(
-        get_duration(os.path.join(audio_dir, fn)) for fn in original_files
+    filelist, chapters, total_duration, concat_list_path = generate_lists(
+        audio_dir, original_files
     )
-    concat_list_path = os.path.join(audio_dir, "temp_concat_list.txt")
-    with open(concat_list_path, "w", encoding="utf-8") as f:
-        f.write("")
-
-    # Generate chapters.txt metadata file with start/end times for each original file
-    start = 0
-    with open(chapters, "w") as f:
-        f.write(";FFMETADATA1\n")
-        for i, fn in enumerate(original_files, 1):
-            dur = get_duration(os.path.join(audio_dir, fn))
-            end = start + dur
-            f.write("[CHAPTER]\n")
-            f.write("TIMEBASE=1/1000\n")
-            f.write(f"START={start}\n")
-            f.write(f"END={end}\n")
-            # Use original filename for chapter title (preserve apostrophes)
-            f.write(f"title=Chapter {i}: {fn}\n\n")
-            start = end
 
     # Detect codec for conversion decision
     codec = get_codec(audio_dir, os.path.join(audio_dir, original_files[-1]))
@@ -346,7 +356,7 @@ def main():
         print(f"File codec for {audio_dir} is {codec} and not supported.")
         sys.exit(1)
 
-    print(f" Completed conversion for {audio_dir.split('/')[-1]}\n\n\n")
+    print(f"\n Completed conversion for {audio_dir.split('/')[-1]}\n\n\n")
 
 
 if __name__ == "__main__":
