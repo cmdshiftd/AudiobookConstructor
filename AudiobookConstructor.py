@@ -272,8 +272,7 @@ def convert_mp3(
             eta_str = f"{eta_minutes}m {eta_seconds}s"
 
         # Print progress every N%
-        num = random.randint(7, 13)
-        if int(percentage) % num == 0 and int(percentage) != 100:
+        if int(percentage) % random.randint(7, 13) == 0 and int(percentage) != 100:
             print(f"   Progress: {percentage:.1f}%\t{base_name}\n    ETA: ~{eta_str}")
 
     print(f"\n Organising chapters and adding cover...")
