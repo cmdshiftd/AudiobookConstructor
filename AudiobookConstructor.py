@@ -69,6 +69,7 @@ def write_concat_list(audio_dir, temp_files):
 
             # Wrap path in single quotes, escaping existing single quotes
             safe_path = temp_file.replace("'", "'\\''")
+            # Additional special characters haven't yet been tested inc. ", &
             f.write(f"file '{safe_path}'\n")
 
     return concat_list_path
@@ -138,29 +139,6 @@ def add_metadata(audio_dir, chapters, output_file, concat_list_path, author=None
     temp_final_file = os.path.join(
         audio_dir, f"{os.path.basename(audio_dir)}_with_chapters.m4b"
     )
-    chapter_command = [
-        "ffmpeg",
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-y",
-        "-i",
-        final_file,
-        "-i",
-        chapters,
-        "-map_metadata",
-        "1",
-        "-c:a",
-        "copy",
-        "-metadata",
-        f"title={os.path.basename(audio_dir)}",
-        "-metadata",
-        f"album={os.path.basename(audio_dir)}",
-        "-metadata",
-        f"author={author}",
-        "-metadata",
-        f"artist={author}",
-    ]
 
     # Detect and include cover image (if found)
     cover_file = None
@@ -172,16 +150,53 @@ def add_metadata(audio_dir, chapters, output_file, concat_list_path, author=None
                 break
         if cover_file:
             break
+
+    # Build FFmpeg command inputs
+    chapter_command = [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-i",
+        final_file,
+        "-i",
+        chapters,
+    ]
+
+    # Include the cover as an input
+    if cover_file:
+        chapter_command.extend(["-i", cover_file])
+        meta_insert = ", organising chapters and adding cover"
+
+    # Add metadata
+    chapter_command.extend(
+        [
+            "-map_metadata",
+            "1",
+            "-c:a",
+            "copy",
+            "-metadata",
+            f"title={os.path.basename(audio_dir)}",
+            "-metadata",
+            f"album={os.path.basename(audio_dir)}",
+            "-metadata",
+            f"author={author}",
+            "-metadata",
+            f"artist={author}",
+        ]
+    )
+
+    # Attach cover to the output
     if cover_file:
         chapter_command.extend(
-            ["-i", cover_file, "-map", "2", "-disposition:v", "attached_pic"]
+            ["-map", str(len(chapter_command) - 1), "-disposition:v", "attached_pic"]
         )
-        meta_insert = ", organising chapters and adding cover"
 
     print(f"\n Re-encoding{meta_insert}...")
     re_encode(concat_list_path, output_file)
 
-    chapter_command.append(temp_final_file)
+    # chapter_command.append(temp_final_file)
     result = subprocess.run(chapter_command, capture_output=True, text=True)
     if result.returncode != 0 or not os.path.exists(temp_final_file):
         print("FFmpeg failed to add chapters and/or cover:\n", result.stderr)
@@ -278,8 +293,9 @@ def convert_mp3(
             eta_seconds = eta_seconds % 60
             eta_str = f"{eta_minutes}m {eta_seconds}s"
 
+        # Print progress after every chapter
         if verbose:
-            print(f"Converted: {os.path.basename(input_file)}")
+            print(f"   Progress: {percentage:.1f}%\t{base_name}\n    ETA: ~{eta_str}")
         # Print progress every N%
         elif int(percentage) % num == 0 and int(percentage) != 100:
             print(f"   Progress: {percentage:.1f}%\t{base_name}\n    ETA: ~{eta_str}")
