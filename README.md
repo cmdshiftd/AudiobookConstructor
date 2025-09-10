@@ -8,7 +8,7 @@ Install/build [FFmpeg](https://ffmpeg.org) for your platform.
 
 ## Usage
 
-`python3 AudiobookConstructor.py <audiobook_directory/title> <author>`
+`python3 AudiobookConstructor.py <audiobook_directory/title> <author> [--verbose]`
 
 <br>
 
