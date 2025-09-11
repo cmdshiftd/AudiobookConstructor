@@ -58,9 +58,7 @@ def get_codec(audio_dir, file_path):
         capture_output=True,
         text=True,
     )
-    print(
-        f"\n Converting {audio_dir.split('/')[-1]} ({result.stdout.strip()}) -> {audio_dir.split('/')[-1]}.m4b..."
-    )
+    print(f"\n Converting {audio_dir.split('/')[-1]} ({result.stdout.strip()})...")
 
     return result.stdout.strip()
 
@@ -227,7 +225,7 @@ def add_metadata(audio_dir, chapters, output_file, concat_list_path, author=None
             ]
         )
 
-    print(f"\n Re-encoding{meta_insert}...")
+    print(f"\n Encoding{meta_insert}...")
     re_encode(concat_list_path, output_file)
 
     chapter_command.append(temp_final_file)
@@ -239,21 +237,20 @@ def add_metadata(audio_dir, chapters, output_file, concat_list_path, author=None
 
 
 # Cleanup temporary files
-def clean_up(audio_dir, filelist, codec):
+def clean_up(audio_dir, codec):
     os.rename(os.path.join(audio_dir, f"{audio_dir}.m4b"), f"{audio_dir}.m4b")
 
     # Archive all original files
-    source_dir = os.path.dirname(filelist)
     with zipfile.ZipFile(
-        os.path.join(source_dir, f"{os.path.basename(source_dir)}.orig.zip"),
+        os.path.join(f"{os.path.basename(audio_dir)}.orig.zip"),
         "w",
         zipfile.ZIP_DEFLATED,
     ) as archive:
-        for book_file in os.listdir("."):
+        for book_file in os.listdir(audio_dir):
             if os.path.isfile(book_file) and (
                 book_file.endswith(f".{codec}")
                 or (
-                    book_file.startswith(source_dir)
+                    book_file.startswith(audio_dir)
                     and (
                         book_file.endswith(".jpg")
                         or book_file.endswith(".jpeg")
@@ -272,6 +269,7 @@ def clean_up(audio_dir, filelist, codec):
             and not book_file.endswith(".pdf")
         ):
             os.remove(os.path.join(audio_dir, book_file))
+    os.rmdir(audio_dir)
 
 
 # Convert mp3 files to m4a, then concatenate with chapters metadata into m4b
