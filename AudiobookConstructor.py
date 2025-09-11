@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 import os
-import random
 import re
 import subprocess
 import sys
 import time
 import zipfile
+
+from tqdm import tqdm
 
 
 # Sort chapters into nermerical order
@@ -60,6 +61,7 @@ def get_codec(audio_dir, file_path):
     print(
         f"\n Converting {audio_dir.split('/')[-1]} ({result.stdout.strip()}) -> {audio_dir.split('/')[-1]}.m4b..."
     )
+
     return result.stdout.strip()
 
 
@@ -237,32 +239,39 @@ def add_metadata(audio_dir, chapters, output_file, concat_list_path, author=None
 
 
 # Cleanup temporary files
-def clean_up(filelist, temp_files, concat_list_path, codec):
-    # Archive all original files
-    audio_dir = os.path.dirname(filelist)
-    archive_file = os.path.join(
-        audio_dir, f"{os.path.basename(audio_dir)}_originals.zip"
-    )
-    with zipfile.ZipFile(archive_file, "w", zipfile.ZIP_DEFLATED) as archive:
-        with open(filelist, "r", encoding="utf-8") as f:
-            for line in f:
-                if os.path.exists(line.strip()) and (
-                    line.strip().lower().endswith(f".{codec}")
-                    or line.strip().lower().endswith(".jpg")
-                    or line.strip().lower().endswith(".jpeg")
-                    or line.strip().lower().endswith(".png")
-                ):
-                    archive.write(line.strip(), arcname=os.path.basename(line.strip()))
-                    os.remove(line.strip())  # delete original after adding to archive
+def clean_up(audio_dir, filelist, codec):
+    os.rename(os.path.join(audio_dir, f"{audio_dir}.m4b"), f"{audio_dir}.m4b")
 
-    # Delete temp and txt files
-    for temp_file in temp_files:
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
-    if os.path.exists(concat_list_path):
-        os.remove(concat_list_path)
-    os.remove(os.path.join(audio_dir, "filelist.txt"))
-    os.remove(os.path.join(audio_dir, "chapters.txt"))
+    # Archive all original files
+    source_dir = os.path.dirname(filelist)
+    with zipfile.ZipFile(
+        os.path.join(source_dir, f"{os.path.basename(source_dir)}.orig.zip"),
+        "w",
+        zipfile.ZIP_DEFLATED,
+    ) as archive:
+        for book_file in os.listdir("."):
+            if os.path.isfile(book_file) and (
+                book_file.endswith(f".{codec}")
+                or (
+                    book_file.startswith(source_dir)
+                    and (
+                        book_file.endswith(".jpg")
+                        or book_file.endswith(".jpeg")
+                        or book_file.endswith(".png")
+                    )
+                )
+            ):
+                archive.write(book_file, arcname=os.path.basename(book_file))
+
+    # Delete all original and temporary files
+    for book_file in os.listdir(audio_dir):
+        if os.path.isfile(os.path.join(audio_dir, book_file)) and (
+            not book_file.endswith(".m4b")
+            and not book_file.endswith(".zip")
+            and not book_file.endswith(".epub")
+            and not book_file.endswith(".pdf")
+        ):
+            os.remove(os.path.join(audio_dir, book_file))
 
 
 # Convert mp3 files to m4a, then concatenate with chapters metadata into m4b
@@ -279,7 +288,6 @@ def convert_mp3(
     output_file,
     concat_list_path,
     codec,
-    verbose,
 ):
     # Convert each mp3 file to m4a with AAC codec and 128k bitrate
     with open(filelist, "r") as f:
@@ -292,70 +300,79 @@ def convert_mp3(
                 path = path[1:-1]
             files.append(path)
 
-    num = random.randint(8, 12)
-    for _, input_file in enumerate(files, 1):
-        duration = get_duration(input_file)
-        base_name = os.path.splitext(os.path.basename(input_file))[0]
-        temp_file = os.path.join(audio_dir, f"{base_name}.m4a")
+    with tqdm(
+        files,
+        unit="file",
+    ) as pbar:
+        for input_file in pbar:
+            duration = get_duration(input_file)
+            base_name = os.path.splitext(os.path.basename(input_file))[0]
+            temp_file = os.path.join(audio_dir, f"{base_name}.m4a")
 
-        # Remove temp file if exists
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
-        temp_files.append(temp_file)
+            # Remove temp file if exists
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+            temp_files.append(temp_file)
 
-        # Append to concat list
-        with open(
-            os.path.join(audio_dir, "temp_concat_list.txt"), "a", encoding="utf-8"
-        ) as templist:
-            # Wrap path in single quotes, escape any existing single quotes for FFmpeg concat
-            safe_path = os.path.abspath(temp_file).replace("'", "'\\''")
-            templist.write(f"file '{safe_path}'\n")
+            # Append to concat list
+            with open(
+                os.path.join(audio_dir, "temp_concat_list.txt"), "a", encoding="utf-8"
+            ) as templist:
+                # Wrap path in single quotes, escape any existing single quotes for FFmpeg concat
+                safe_path = os.path.abspath(temp_file).replace("'", "'\\''")
+                templist.write(f"file '{safe_path}'\n")
 
-        command = [
-            "ffmpeg",
-            "-hide_banner",
-            "-y",
-            "-i",
-            input_file,
-            "-c:a",
-            "aac",
-            "-b:a",
-            "128k",
-            "-ar",
-            "44100",
-            "-ac",
-            "2",
-            temp_file,
-        ]
-        result = subprocess.run(command, capture_output=True, text=True)
-        if result.returncode != 0:
-            print(f"\nFFmpeg failed for {input_file}:\n{result.stderr}")
-            sys.exit(1)
+            command = [
+                "ffmpeg",
+                "-hide_banner",
+                "-y",
+                "-i",
+                input_file,
+                "-c:a",
+                "aac",
+                "-b:a",
+                "128k",
+                "-ar",
+                "44100",
+                "-ac",
+                "2",
+                temp_file,
+            ]
+            result = subprocess.run(command, capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"\nFFmpeg failed for {input_file}:\n{result.stderr}")
+                sys.exit(1)
 
-        if not os.path.exists(temp_file):
-            print("Error: Failed to create temp file:", temp_file)
-            sys.exit(1)
+            if not os.path.exists(temp_file):
+                print("Error: Failed to create temp file:", temp_file)
+                sys.exit(1)
 
-        # Show progress
-        cumulative_duration += duration
-        percentage = cumulative_duration / total_duration * 100
-        elapsed_time = time.time() - start_time
-        if cumulative_duration > 0:
-            estimated_total_time = elapsed_time / (cumulative_duration / total_duration)
-            eta_seconds = int(estimated_total_time - elapsed_time)
-            eta_minutes = eta_seconds // 60
-            eta_seconds = eta_seconds % 60
-            eta_str = f"{eta_minutes}m {eta_seconds}s"
+            # Update cumulative progress and ETA
+            cumulative_duration += duration
+            percentage = cumulative_duration / total_duration * 100
+            elapsed_time = time.time() - start_time
+            if cumulative_duration > 0:
+                estimated_total_time = elapsed_time / (
+                    cumulative_duration / total_duration
+                )
+                eta_seconds = int(estimated_total_time - elapsed_time)
+                eta_minutes = eta_seconds // 60
+                eta_seconds = eta_seconds % 60
+                eta_str = f"{eta_minutes}m {eta_seconds}s"
 
-        # Print progress after every chapter
-        if verbose and int(percentage) != 100:
-            print(f"   Progress: {percentage:.1f}%\t{base_name}\n    ETA: ~{eta_str}")
-        # Print progress every N%
-        elif int(percentage) % num == 0 and int(percentage) != 100:
-            print(f"   Progress: {percentage:.1f}%\t{base_name}\n    ETA: ~{eta_str}")
+                # show extra info in the tqdm bar
+                pbar.set_postfix(
+                    {
+                        "Progress": f"{percentage:.1f}%",
+                        "ETA": eta_str,
+                    }
+                )
+
+                # print chapter name on its own line below the bar
+                pbar.write(f"  ✔️   {base_name}")
 
     add_metadata(audio_dir, chapters, output_file, concat_list_path, author)
-    clean_up(filelist, temp_files, concat_list_path, codec)
+    clean_up(audio_dir, filelist, codec)
 
 
 def main():
@@ -365,9 +382,7 @@ def main():
 
     # Verify command syntax
     if len(sys.argv) < 3:
-        print(
-            "Usage: python AudiobookConstructor.py <audiobook_directory> <author> [--verbose]"
-        )
+        print("Usage: python AudiobookConstructor.py <audiobook_directory> <author>")
         sys.exit(1)
 
     audio_dir = sys.argv[1]
@@ -376,10 +391,6 @@ def main():
     if not os.path.isdir(audio_dir):
         print(f"Error: Directory '{audio_dir}' does not exist.")
         sys.exit(1)
-
-    verbose = False
-    if "--verbose" in sys.argv:
-        verbose = True
 
     files = []
     temp_files = []
@@ -422,7 +433,6 @@ def main():
             output_file,
             concat_list_path,
             codec,
-            verbose,
         )
     elif codec == "aac":
         pass
