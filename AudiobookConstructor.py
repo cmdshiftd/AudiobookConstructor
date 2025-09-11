@@ -370,7 +370,7 @@ def convert_mp3(
                 pbar.write(f"  ✔️   {base_name}")
 
     add_metadata(audio_dir, chapters, output_file, concat_list_path, author)
-    clean_up(audio_dir, filelist, codec)
+    clean_up(audio_dir, codec)
 
 
 def main():
