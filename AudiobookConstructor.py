@@ -380,7 +380,7 @@ def main():
 
     # Verify command syntax
     if len(sys.argv) < 3:
-        print("Usage: python AudiobookConstructor.py <audiobook_directory> <author>")
+        print("Usage: python3 AudiobookConstructor.py <audiobook_directory> <author>")
         sys.exit(1)
 
     audio_dir = sys.argv[1]
