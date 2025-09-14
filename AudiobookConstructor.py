@@ -8,9 +8,11 @@ import warnings
 import whisper
 import zipfile
 
+from datetime import datetime
 from tqdm import tqdm
 
 
+# Read chapter_titles.txt to obtain chorniclogical chapters
 def load_chapter_titles(filename="chapter_titles.txt"):
     titles = []
     if os.path.exists(filename):
@@ -22,6 +24,7 @@ def load_chapter_titles(filename="chapter_titles.txt"):
     return titles
 
 
+# Identify occurances of chapter titles
 def find_sections(
     audio_file,
     pattern=r"(chapter (\d+)|introduction|conclusion|prologue|epilogue|foreword|afterword)",
@@ -79,6 +82,7 @@ def find_sections(
     return matches, result, non_chapters
 
 
+# Extract chapters from original file
 def split_chapters(audio_file, output_dir=None, model_size="base"):
     # Splits the audio file into chapters based on 'chapter (\d+)' markers.
     # Returns a list of dicts with chapter number, start time, end time, and output file.
@@ -155,11 +159,11 @@ def split_chapters(audio_file, output_dir=None, model_size="base"):
             ]
         start_min = int(start // 60)
         start_sec = int(start % 60)
-        print(f"  ✔️   Exported: {chapter_label}: {start_min:02d}:{start_sec:02d}")
         try:
             subprocess.run(
                 ffmpeg_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
             )
+            print(f"  ✔️   Exported: {chapter_label}: {start_min:02d}:{start_sec:02d}")
         except subprocess.CalledProcessError as e:
             print(f"Error: ffmpeg failed for {chapter_label}: {e}")
             continue
@@ -505,6 +509,9 @@ def main():
     subprocess.Popen(["clear"])
     time.sleep(0.1)
 
+    with open("timestamps", "w") as ts:
+        ts.write(f"Script started: {str(datetime.now())}\n")
+
     if len(sys.argv) < 3:
         print("Usage: python3 AudiobookConstructor_new.py <audiobook_file> <author>")
         sys.exit(1)
@@ -534,12 +541,22 @@ def main():
                 sys.exit(1)
 
     # Extract chapters from orignal single audio file
-    split_chapters(audio_file, output_dir=audio_dir)
+    chapters = split_chapters(audio_file, output_dir=audio_dir)
 
-    # INSERT PROMPT TO CONFIRM CONTINUATION - NON-CHAPTERS HAVE NOT BEEN EXTRACTED THUS M4B WILL NOT NECESSARILY BE COMPLETE
-    # time.sleep(10)
-    # subprocess.Popen(["clear"])
-    # time.sleep(0.1)
+    with open("timestamps", "a") as ts:
+        ts.write(f"Chapters extracted: {str(datetime.now())}\n")
+
+    print(
+        f"\n - Chapters 1 thru {str(len(chapters))} have been extracted.\n    Non-chapters will need to be extracted manually."
+    )
+    time.sleep(10)
+
+    # input("    Press any key to continue...\n")
+    subprocess.Popen(["clear"])
+    time.sleep(0.1)
+
+    with open("timestamps", "a") as ts:
+        ts.write(f"Begin conversion: {str(datetime.now())}\n")
 
     # Begin conversion and amalgamation of extracted chapters into single m4b file
     files = []
@@ -588,6 +605,9 @@ def main():
         sys.exit(1)
 
     print(f"\n Completed conversion for '{audio_dir.split('/')[-1]}'\n\n\n")
+
+    with open("timestamps", "a") as ts:
+        ts.write(f"Completed conversion: {str(datetime.now())}\n")
 
 
 if __name__ == "__main__":
