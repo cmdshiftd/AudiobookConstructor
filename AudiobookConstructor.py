@@ -4,12 +4,188 @@ import re
 import subprocess
 import sys
 import time
+import warnings
+import whisper
 import zipfile
 
 from tqdm import tqdm
 
 
-# Sort chapters into nermerical order
+def load_chapter_titles(filename="chapter_titles.txt"):
+    titles = []
+    if os.path.exists(filename):
+        with open(filename, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    titles.append(line)
+    return titles
+
+
+def find_sections(
+    audio_file,
+    pattern=r"(chapter (\d+)|introduction|conclusion|prologue|epilogue|foreword|afterword)",
+    model_size="base",
+):
+    # Transcribe the audio file and return matches of the regex pattern.
+    # Returns a list of dicts with 'start', 'end', 'text', and 'match' (the regex match object).
+    model = whisper.load_model(model_size)
+
+    print(f"Transcribing '{audio_file}'... this may take a while")
+
+    result = model.transcribe(audio_file)
+    total_duration = result.get("duration")
+    regex = re.compile(pattern, re.IGNORECASE)
+    matches = []
+
+    for seg in result["segments"]:
+        # Progress reporting
+        if total_duration:
+            progress = (seg["end"] / total_duration) * 100
+            mm = int(seg["end"] // 60)
+            ss = int(seg["end"] % 60)
+            print(f"Progress: {progress:.0f}% ({mm:02d}:{ss:02d})")
+        text = seg["text"]
+
+        for match in regex.finditer(text):
+            matches.append(
+                {
+                    "start": seg["start"],
+                    "end": seg["end"],
+                    "text": text,
+                    "match": match,
+                }
+            )
+
+    # Only group/print non-chapter keywords
+    non_chapter_keywords = [
+        "introduction",
+        "conclusion",
+        "prologue",
+        "epilogue",
+        "foreword",
+        "afterword",
+    ]
+    non_chapters = {}
+
+    for m in matches:
+        kw = m["match"].group(1)
+        if kw and kw.strip().lower() in non_chapter_keywords:
+            key = kw.strip().capitalize()
+            if key not in non_chapters:
+                non_chapters[key] = []
+            non_chapters[key].append(m["start"])
+
+    return matches, result, non_chapters
+
+
+def split_chapters(audio_file, output_dir=None, model_size="base"):
+    # Splits the audio file into chapters based on 'chapter (\d+)' markers.
+    # Returns a list of dicts with chapter number, start time, end time, and output file.
+    if output_dir is None:
+        output_dir = os.path.dirname(os.path.abspath(audio_file))
+    os.makedirs(output_dir, exist_ok=True)
+
+    pattern = r"(chapter (\d+)|introduction|prologue|epilogue|preface|conclusion)"
+    matches, result, non_chapters = find_sections(
+        audio_file, pattern=pattern, model_size=model_size
+    )
+    if not matches:
+        print("No chapter markers found.")
+        return []
+
+    titles = load_chapter_titles()
+    seen_chapters = set()
+
+    # Sort by start time
+    matches.sort(key=lambda m: m["start"])
+    chapters = []
+    for idx, m in enumerate(matches):
+        if m["match"].group(2):
+            chapter_num = int(m["match"].group(2))
+            if chapter_num in seen_chapters:
+                continue
+            seen_chapters.add(chapter_num)
+            if 1 <= chapter_num <= len(titles):
+                chapter_label = f"Chapter {chapter_num} - {titles[chapter_num - 1]}"
+            else:
+                chapter_label = f"Chapter {chapter_num}"
+        else:
+            # Skip non-chapter keywords
+            continue
+        start = m["start"]
+        # End is the start of the next chapter, or end of audio
+        if idx + 1 < len(matches):
+            end = matches[idx + 1]["start"]
+        else:
+            # Use last segment end time as the end
+            if "segments" in result and result["segments"]:
+                end = result["segments"][-1]["end"]
+            else:
+                end = None  # fallback
+        input_ext = os.path.splitext(audio_file)[1]
+        output_filename = os.path.join(output_dir, f"{chapter_label}{input_ext}")
+        # ffmpeg command to extract segment
+        if end is not None:
+            duration = end - start
+            ffmpeg_cmd = [
+                "ffmpeg",
+                "-y",
+                "-i",
+                audio_file,
+                "-ss",
+                str(start),
+                "-t",
+                str(duration),
+                "-c",
+                "copy",
+                output_filename,
+            ]
+        else:
+            ffmpeg_cmd = [
+                "ffmpeg",
+                "-y",
+                "-i",
+                audio_file,
+                "-ss",
+                str(start),
+                "-c",
+                "copy",
+                output_filename,
+            ]
+        start_min = int(start // 60)
+        start_sec = int(start % 60)
+        print(f"  ✔️   Exported: {chapter_label}: {start_min:02d}:{start_sec:02d}")
+        try:
+            subprocess.run(
+                ffmpeg_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
+        except subprocess.CalledProcessError as e:
+            print(f"Error: ffmpeg failed for {chapter_label}: {e}")
+            continue
+        chapters.append(
+            {
+                "chapter": chapter_label,
+                "start": start,
+                "end": end,
+                "file": output_filename,
+            }
+        )
+
+    if non_chapters:
+        print("\n=== Non-Chapter Occurrences ===")
+        for keyword, timestamps in non_chapters.items():
+            formatted_times = []
+            for t in timestamps:
+                start_min = int(t // 60)
+                start_sec = int(t % 60)
+                formatted_times.append(f"{start_min:02d}:{start_sec:02d}")
+            print(f" - '{keyword}':\t{', '.join(formatted_times)}")
+
+    return chapters
+
+
+# Sort chapters into numerical order
 def sort_chapters_numerically(s):
     return [
         int(text) if text.isdigit() else text.lower() for text in re.split(r"(\d+)", s)
@@ -58,7 +234,7 @@ def get_codec(audio_dir, file_path):
         capture_output=True,
         text=True,
     )
-    print(f"\n Converting {audio_dir.split('/')[-1]} ({result.stdout.strip()})...")
+    print(f"\n Converting '{audio_dir.split('/')[-1]}' ({result.stdout.strip()})...")
 
     return result.stdout.strip()
 
@@ -92,8 +268,6 @@ def write_concat_list(audio_dir, temp_files):
                 print("Error: temp file not found:", temp_file)
                 sys.exit(1)
 
-            # Wrap path in single quotes, escaping existing single quotes
-            # Additional special characters haven't yet been tested inc. ", &
             concatlist.write(
                 f"file '{os.path.abspath(temp_file).replace("'", "''")}'\n"
             )
@@ -106,7 +280,6 @@ def generate_lists(audio_dir, original_files):
     filelist = os.path.join(audio_dir, "filelist.txt")
     chapters = os.path.join(audio_dir, "chapters.txt")
 
-    # Write relative paths of audio files to filelist.txt; write_concat_list will handle quotes
     with open(filelist, "w") as filelisttxt:
         for fn in original_files:
             filelisttxt.write(f"{os.path.join(audio_dir, fn)}\n")
@@ -118,13 +291,11 @@ def generate_lists(audio_dir, original_files):
     with open(concat_list_path, "w", encoding="utf-8") as f:
         f.write("")
 
-    # Generate chapters.txt metadata file with start/end times for each original file
     start = 0
     with open(chapters, "w") as chapterstxt:
         chapterstxt.write(";FFMETADATA1\n")
         for _, fn in enumerate(original_files, 1):
             end = start + get_duration(os.path.join(audio_dir, fn))
-            # Use original filename for chapter title (preserve apostrophes)
             chapterstxt.write(
                 f"[CHAPTER]\nTIMEBASE=1/1000\nSTART={start}\nEND={end}\ntitle={fn.replace(' - ', ': ')}\n\n"
             )
@@ -139,7 +310,7 @@ def re_encode(concat_list_path, output_file):
         "ffmpeg",
         "-hide_banner",
         "-loglevel",
-        "error",  # only show real errors here
+        "error",
         "-y",
         "-f",
         "concat",
@@ -157,24 +328,14 @@ def re_encode(concat_list_path, output_file):
 
 
 # Add chapters metadata into a new file (ffmpeg cannot edit in-place)
-def add_metadata(audio_dir, chapters, output_file, concat_list_path, author=None):
+def add_metadata(
+    audio_dir, cover_file, chapters, output_file, concat_list_path, author=None
+):
     final_file = os.path.join(audio_dir, f"{os.path.basename(audio_dir)}.m4b")
     temp_final_file = os.path.join(
         audio_dir, f"{os.path.basename(audio_dir)}_with_chapters.m4b"
     )
 
-    # Detect and include cover image (if found)
-    cover_file = None
-    meta_insert = "and organising chapters"
-    for ext in (".jpg", ".jpeg", ".png"):
-        for f in os.listdir(audio_dir):
-            if f.startswith(os.path.basename(audio_dir)) and f.lower().endswith(ext):
-                cover_file = os.path.join(audio_dir, f)
-                break
-        if cover_file:
-            break
-
-    # Build FFmpeg command inputs
     chapter_command = [
         "ffmpeg",
         "-hide_banner",
@@ -185,14 +346,9 @@ def add_metadata(audio_dir, chapters, output_file, concat_list_path, author=None
         final_file,
         "-i",
         chapters,
+        "-i",
+        cover_file,
     ]
-
-    # Include the cover as an input
-    if cover_file:
-        chapter_command.extend(["-i", cover_file])
-        meta_insert = ", organising chapters and adding cover"
-
-    # Add metadata
     chapter_command.extend(
         [
             "-map_metadata",
@@ -209,23 +365,20 @@ def add_metadata(audio_dir, chapters, output_file, concat_list_path, author=None
             f"artist={author}",
         ]
     )
+    chapter_command.extend(
+        [
+            "-map",
+            "0:a",
+            "-map",
+            "2",
+            "-c:v",
+            "mjpeg",
+            "-disposition:v",
+            "attached_pic",
+        ]
+    )
 
-    # Attach cover to the output
-    if cover_file:
-        chapter_command.extend(
-            [
-                "-map",
-                "0:a",  # map the audio
-                "-map",
-                "2",  # map the cover image
-                "-c:v",
-                "mjpeg",  # encode cover as MJPEG
-                "-disposition:v",
-                "attached_pic",
-            ]
-        )
-
-    print(f"\n Encoding{meta_insert}...")
+    print(f"\n Encoding, organising chapters and adding cover...")
     re_encode(concat_list_path, output_file)
 
     chapter_command.append(temp_final_file)
@@ -237,39 +390,31 @@ def add_metadata(audio_dir, chapters, output_file, concat_list_path, author=None
 
 
 # Cleanup temporary files
-def clean_up(audio_dir, codec):
+def clean_up(audio_dir):
     os.rename(os.path.join(audio_dir, f"{audio_dir}.m4b"), f"{audio_dir}.m4b")
 
-    # Archive all original files
-    with zipfile.ZipFile(
-        os.path.join(f"{os.path.basename(audio_dir)}.orig.zip"),
-        "w",
-        zipfile.ZIP_DEFLATED,
-    ) as archive:
-        for book_file in os.listdir(audio_dir):
-            if os.path.isfile(book_file) and (
-                book_file.endswith(f".{codec}")
-                or (
-                    book_file.startswith(audio_dir)
-                    and (
-                        book_file.endswith(".jpg")
-                        or book_file.endswith(".jpeg")
-                        or book_file.endswith(".png")
-                    )
-                )
-            ):
-                archive.write(book_file, arcname=os.path.basename(book_file))
-
-    # Delete all original and temporary files
     for book_file in os.listdir(audio_dir):
         if os.path.isfile(os.path.join(audio_dir, book_file)) and (
             not book_file.endswith(".m4b")
+            and not book_file.endswith(".m4a")
+            and not book_file.endswith(".mp3")
             and not book_file.endswith(".zip")
             and not book_file.endswith(".epub")
             and not book_file.endswith(".pdf")
         ):
             os.remove(os.path.join(audio_dir, book_file))
-    os.rmdir(audio_dir)
+
+    with zipfile.ZipFile(
+        os.path.join(f"{os.path.basename(audio_dir)}.orig.zip"),
+        "w",
+        zipfile.ZIP_DEFLATED,
+    ) as archive:
+        for root, _, files in os.walk(audio_dir):
+            for file in files:
+                archive.write(
+                    os.path.join(root, file),
+                    arcname=os.path.relpath(os.path.join(root, file), audio_dir),
+                )
 
 
 # Convert mp3 files to m4a, then concatenate with chapters metadata into m4b
@@ -278,6 +423,7 @@ def convert_mp3(
     filelist,
     chapters,
     audio_dir,
+    cover_file,
     total_duration,
     files,
     temp_files,
@@ -285,38 +431,29 @@ def convert_mp3(
     start_time,
     output_file,
     concat_list_path,
-    codec,
 ):
-    # Convert each mp3 file to m4a with AAC codec and 128k bitrate
     with open(filelist, "r") as f:
         for line in f:
             path = line.strip()
-            # Remove surrounding quotes if present
             if path.startswith("'") and path.endswith("'"):
                 path = path[1:-1]
             elif path.startswith('"') and path.endswith('"'):
                 path = path[1:-1]
             files.append(path)
 
-    with tqdm(
-        files,
-        unit="file",
-    ) as pbar:
+    with tqdm(files, unit="file") as pbar:
         for input_file in pbar:
             duration = get_duration(input_file)
             base_name = os.path.splitext(os.path.basename(input_file))[0]
             temp_file = os.path.join(audio_dir, f"{base_name}.m4a")
 
-            # Remove temp file if exists
             if os.path.exists(temp_file):
                 os.remove(temp_file)
             temp_files.append(temp_file)
 
-            # Append to concat list
             with open(
                 os.path.join(audio_dir, "temp_concat_list.txt"), "a", encoding="utf-8"
             ) as templist:
-                # Wrap path in single quotes, escape any existing single quotes for FFmpeg concat
                 safe_path = os.path.abspath(temp_file).replace("'", "'\\''")
                 templist.write(f"file '{safe_path}'\n")
 
@@ -345,7 +482,6 @@ def convert_mp3(
                 print("Error: Failed to create temp file:", temp_file)
                 sys.exit(1)
 
-            # Update cumulative progress and ETA
             cumulative_duration += duration
             percentage = cumulative_duration / total_duration * 100
             elapsed_time = time.time() - start_time
@@ -358,45 +494,60 @@ def convert_mp3(
                 eta_seconds = eta_seconds % 60
                 eta_str = f"{eta_minutes}m {eta_seconds}s"
 
-                # show extra info in the tqdm bar
-                pbar.set_postfix(
-                    {
-                        "Progress": f"{percentage:.1f}%",
-                        "ETA": eta_str,
-                    }
-                )
-
-                # print chapter name on its own line below the bar
+                pbar.set_postfix({"Progress": f"{percentage:.1f}%", "ETA": eta_str})
                 pbar.write(f"  ✔️   {base_name}")
 
-    add_metadata(audio_dir, chapters, output_file, concat_list_path, author)
-    clean_up(audio_dir, codec)
+    add_metadata(audio_dir, cover_file, chapters, output_file, concat_list_path, author)
+    clean_up(audio_dir)
 
 
 def main():
-    # Clear the terminal screen before starting
     subprocess.Popen(["clear"])
     time.sleep(0.1)
 
-    # Verify command syntax
     if len(sys.argv) < 3:
-        print("Usage: python3 AudiobookConstructor.py <audiobook_directory> <author>")
+        print("Usage: python3 AudiobookConstructor_new.py <audiobook_file> <author>")
         sys.exit(1)
 
-    audio_dir = sys.argv[1]
+    warnings.filterwarnings("ignore")
+    audio_file = sys.argv[1]
     author = sys.argv[2]
-    # Check if the provided directory exists
-    if not os.path.isdir(audio_dir):
-        print(f"Error: Directory '{audio_dir}' does not exist.")
+    audio_dir = audio_file.split(".")[0]
+
+    if os.path.isdir(audio_dir):
+        print(f"Error: Directory '{audio_dir}' already exists.")
         sys.exit(1)
 
+    os.makedirs(audio_dir, exist_ok=True)
+
+    if not os.path.isfile(audio_file):
+        print(f"Error: Directory '{audio_file}' does not exist.")
+        sys.exit(1)
+
+    for ext in (".jpg", ".jpeg", ".png"):
+        for f in os.listdir(audio_dir):
+            if f.startswith(os.path.basename(audio_dir)) and f.lower().endswith(ext):
+                cover_file = os.path.join(audio_dir, f)
+                break
+            else:
+                print(f"Error: Book Cover could not be found.")
+                sys.exit(1)
+
+    # Extract chapters from orignal single audio file
+    split_chapters(audio_file, output_dir=audio_dir)
+
+    # INSERT PROMPT TO CONFIRM CONTINUATION - NON-CHAPTERS HAVE NOT BEEN EXTRACTED THUS M4B WILL NOT NECESSARILY BE COMPLETE
+    # time.sleep(10)
+    # subprocess.Popen(["clear"])
+    # time.sleep(0.1)
+
+    # Begin conversion and amalgamation of extracted chapters into single m4b file
     files = []
     temp_files = []
     cumulative_duration = 0
     start_time = time.time()
     output_file = os.path.join(audio_dir, f"{os.path.basename(audio_dir)}.m4b")
 
-    # List all audio files with supported extensions in directory
     original_files = sorted(
         [
             f
@@ -408,14 +559,12 @@ def main():
     if not original_files:
         print("No audio files found.")
 
-    # Replace single quotes in filenames with backticks to prevent FFmpeg concat issues
     original_files = replace_special_characters(audio_dir, original_files)
 
     filelist, chapters, total_duration, concat_list_path = generate_lists(
         audio_dir, original_files
     )
 
-    # Detect codec for conversion decision
     codec = get_codec(audio_dir, os.path.join(audio_dir, original_files[-1]))
     if codec == "mp3":
         convert_mp3(
@@ -423,6 +572,7 @@ def main():
             filelist,
             chapters,
             audio_dir,
+            cover_file,
             total_duration,
             files,
             temp_files,
@@ -430,7 +580,6 @@ def main():
             start_time,
             output_file,
             concat_list_path,
-            codec,
         )
     elif codec == "aac":
         pass
