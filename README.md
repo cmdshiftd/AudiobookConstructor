@@ -23,16 +23,18 @@ Install/build [FFmpeg](https://ffmpeg.org) for your platform.<br>
 
 _.../AudiobookConstructor/_<br>
 &emsp;&emsp;- _AudiobookConstructor.py_<br>
-&emsp;&emsp;- _Harry Potter and the Philosopher's Stone/_<br>
-&emsp;&emsp;&emsp;&emsp;- _Harry Potter and the Philosopher's Stone.jpg_<br>
-&emsp;&emsp;&emsp;&emsp;- _Chapter 1 - The Boy Who Lived.mp3_<br>
-&emsp;&emsp;&emsp;&emsp;- _Chapter 2 - The Vanishing Glass.mp3_<br>
-&emsp;&emsp;&emsp;&emsp;- _..._<br>
+&emsp;&emsp;- _Harry Potter and the Philosopher's Stone.mp3_<br>
+&emsp;&emsp;- _Harry Potter and the Philosopher's Stone.jpg_<br>
+&emsp;&emsp;- _..._<br>
 
-If the books has an Introduction, Forward or Afterword, name them as follows:
+You will have to extract segments such as Introduction, Epilogue, Foreword or Afterword etc. manually. And it is advised to name them as follows:
 * Chapter 0.0 - Introduction
 * Chapter 0.1 - Forward
 * Chapter (Last+1) - Afterward
 <br><br>
 
-_**Note**: The processing time will often roughly equate to the length of the audio file._
+<!-- _**Note**: The processing time will often roughly equate to the length of the audio file._ -->
+
+## Support Formats
+* mp3<br>
+<!-- * m4a<br> -->
