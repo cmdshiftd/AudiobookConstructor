@@ -12,6 +12,26 @@ from datetime import datetime
 from tqdm import tqdm
 
 
+def error_checking(audio_dir, audio_file):
+    if os.path.isdir(audio_dir):
+        print(f"Error: Directory '{audio_dir}' already exists.")
+        sys.exit(1)
+
+    if not os.path.isfile(audio_file):
+        print(f"Error: '{audio_file}' does not exist.")
+        sys.exit(1)
+
+    if audio_file in str(os.listdir(".")):
+        pass
+    else:
+        print(f"Error: '{audio_file}' does not exist.")
+        sys.exit(1)
+
+    if not f"{audio_file.split(".")[0]}.jpg" in str(os.listdir(".")):
+        print(f"Error: Book Cover could not be found.")
+        sys.exit(1)
+
+
 # Read chapter_titles.txt to obtain chorniclogical chapters
 def load_chapter_titles(filename="chapter_titles.txt"):
     titles = []
@@ -521,24 +541,9 @@ def main():
     author = sys.argv[2]
     audio_dir = audio_file.split(".")[0]
 
-    if os.path.isdir(audio_dir):
-        print(f"Error: Directory '{audio_dir}' already exists.")
-        sys.exit(1)
+    error_checking(audio_dir, audio_file)
 
     os.makedirs(audio_dir, exist_ok=True)
-
-    if not os.path.isfile(audio_file):
-        print(f"Error: Directory '{audio_file}' does not exist.")
-        sys.exit(1)
-
-    for ext in (".jpg", ".jpeg", ".png"):
-        for f in os.listdir(audio_dir):
-            if f.startswith(os.path.basename(audio_dir)) and f.lower().endswith(ext):
-                cover_file = os.path.join(audio_dir, f)
-                break
-            else:
-                print(f"Error: Book Cover could not be found.")
-                sys.exit(1)
 
     # Extract chapters from orignal single audio file
     chapters = split_chapters(audio_file, output_dir=audio_dir)
