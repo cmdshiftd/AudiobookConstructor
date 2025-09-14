@@ -54,7 +54,7 @@ def find_sections(
     # Returns a list of dicts with 'start', 'end', 'text', and 'match' (the regex match object).
     model = whisper.load_model(model_size)
 
-    print(f"Transcribing '{audio_file}'... this may take a while")
+    print(f"\n Transcribing '{audio_file}'... this may take a while")
 
     result = model.transcribe(audio_file)
     total_duration = result.get("duration")
