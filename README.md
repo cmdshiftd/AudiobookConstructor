@@ -19,7 +19,7 @@ Install/build [FFmpeg](https://ffmpeg.org) for your platform.<br>
 
 <br>
 
-**Ensure the audio files are named as the respective chapters and are within a directory named the book title. The book title directory must exist alongside AudiobookConstructor.py:**
+_Ensure the single audio file is in the **same** directory **AudiobookConstructor.py** and <audio_file_name>**.jpg**:_
 
 _.../AudiobookConstructor/_<br>
 &emsp;&emsp;- _AudiobookConstructor.py_<br>
@@ -29,8 +29,8 @@ _.../AudiobookConstructor/_<br>
 
 You will have to extract segments such as Introduction, Epilogue, Foreword or Afterword etc. manually. And it is advised to name them as follows:
 * Chapter 0.0 - Introduction
-* Chapter 0.1 - Forward
-* Chapter (Last+1) - Afterward
+* Chapter 0.1 - Foreword
+* Chapter (Last+1) - Afterword
 <br><br>
 
 <!-- _**Note**: The processing time will often roughly equate to the length of the audio file._ -->
