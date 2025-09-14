@@ -14,21 +14,21 @@ from tqdm import tqdm
 
 def error_checking(audio_dir, audio_file):
     if os.path.isdir(audio_dir):
-        print(f"Error: Directory '{audio_dir}' already exists.")
+        print(f"\n ❌ Error: Directory '{audio_dir}' already exists.\n\n")
         sys.exit(1)
 
     if not os.path.isfile(audio_file):
-        print(f"Error: '{audio_file}' does not exist.")
+        print(f"\n ❌ Error: '{audio_file}' does not exist.\n\n")
         sys.exit(1)
 
     if audio_file in str(os.listdir(".")):
         pass
     else:
-        print(f"Error: '{audio_file}' does not exist.")
+        print(f"\n ❌ Error: '{audio_file}' does not exist.\n\n")
         sys.exit(1)
 
     if not f"{audio_file.split(".")[0]}.jpg" in str(os.listdir(".")):
-        print(f"Error: Book Cover could not be found.")
+        print(f"\n ❌ Error: Book Cover could not be found.\n\n")
         sys.exit(1)
 
 
@@ -185,7 +185,7 @@ def split_chapters(audio_file, output_dir=None, model_size="base"):
             )
             print(f"  ✔️   Exported: {chapter_label}: {start_min:02d}:{start_sec:02d}")
         except subprocess.CalledProcessError as e:
-            print(f"Error: ffmpeg failed for {chapter_label}: {e}")
+            print(f"\n ❌ Error: ffmpeg failed for {chapter_label}: {e}\n\n")
             continue
         chapters.append(
             {
@@ -289,7 +289,7 @@ def write_concat_list(audio_dir, temp_files):
     with open(concat_list_path, "w") as concatlist:
         for temp_file in temp_files:
             if not os.path.exists(temp_file):
-                print("Error: temp file not found:", temp_file)
+                print("\n ❌ Error: temp file not found:\n\n", temp_file)
                 sys.exit(1)
 
             concatlist.write(
@@ -503,7 +503,7 @@ def convert_mp3(
                 sys.exit(1)
 
             if not os.path.exists(temp_file):
-                print("Error: Failed to create temp file:", temp_file)
+                print("\n ❌ Error: Failed to create temp file:\n\n", temp_file)
                 sys.exit(1)
 
             cumulative_duration += duration
