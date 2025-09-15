@@ -28,8 +28,10 @@ def error_checking(audio_dir, audio_file):
         sys.exit(1)
 
     if not f"{audio_file.split(".")[0]}.jpg" in str(os.listdir(".")):
-        print(f"\n ❌ Error: Book Cover could not be found.\n\n")
+        print(f"\n ❌ Error: Book cover could not be found.\n\n")
         sys.exit(1)
+
+    return f"{audio_file.split(".")[0]}.jpg"
 
 
 # Read chapter_titles.txt to obtain chorniclogical chapters
@@ -353,7 +355,7 @@ def re_encode(concat_list_path, output_file):
 
 # Add chapters metadata into a new file (ffmpeg cannot edit in-place)
 def add_metadata(
-    audio_dir, cover_file, chapters, output_file, concat_list_path, author=None
+    audio_dir, book_cover, chapters, output_file, concat_list_path, author=None
 ):
     final_file = os.path.join(audio_dir, f"{os.path.basename(audio_dir)}.m4b")
     temp_final_file = os.path.join(
@@ -371,7 +373,7 @@ def add_metadata(
         "-i",
         chapters,
         "-i",
-        cover_file,
+        book_cover,
     ]
     chapter_command.extend(
         [
@@ -447,7 +449,7 @@ def convert_mp3(
     filelist,
     chapters,
     audio_dir,
-    cover_file,
+    book_cover,
     total_duration,
     files,
     temp_files,
@@ -521,7 +523,7 @@ def convert_mp3(
                 pbar.set_postfix({"Progress": f"{percentage:.1f}%", "ETA": eta_str})
                 pbar.write(f"  ✔️   {base_name}")
 
-    add_metadata(audio_dir, cover_file, chapters, output_file, concat_list_path, author)
+    add_metadata(audio_dir, book_cover, chapters, output_file, concat_list_path, author)
     clean_up(audio_dir)
 
 
@@ -541,7 +543,7 @@ def main():
     author = sys.argv[2]
     audio_dir = audio_file.split(".")[0]
 
-    error_checking(audio_dir, audio_file)
+    book_cover = error_checking(audio_dir, audio_file)
 
     os.makedirs(audio_dir, exist_ok=True)
 
@@ -556,7 +558,7 @@ def main():
     )
     time.sleep(10)
 
-    # input("    Press any key to continue...\n")
+    input("    Press any key to continue...\n")
     subprocess.Popen(["clear"])
     time.sleep(0.1)
 
@@ -594,7 +596,7 @@ def main():
             filelist,
             chapters,
             audio_dir,
-            cover_file,
+            book_cover,
             total_duration,
             files,
             temp_files,
