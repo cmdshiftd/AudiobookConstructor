@@ -13,6 +13,7 @@ from datetime import datetime
 from tqdm import tqdm
 
 
+# Validate files and directories
 def error_checking(audio_dir, audio_file):
     if os.path.isdir(audio_dir):
         print(f"\n ❌ Error: Directory '{audio_dir}' already exists.\n\n")
@@ -85,7 +86,19 @@ def find_sections(
                 }
             )
 
-    # Only group/print non-chapter keywords
+        # Sort matches by start time
+    matches.sort(key=lambda m: m["start"])
+
+    # Find the first and last real chapter timestamps
+    first_chapter_start = None
+    last_chapter_start = None
+    for m in matches:
+        if m["match"].group(2):  # has a chapter number
+            if first_chapter_start is None:
+                first_chapter_start = m["start"]
+            last_chapter_start = m["start"]
+
+        # Only group/print non-chapter keywords
     non_chapter_keywords = [
         "introduction",
         "conclusion",
@@ -93,12 +106,56 @@ def find_sections(
         "epilogue",
         "foreword",
         "afterword",
+        "preface",
+        "appendix",
+        "addendum",
+        "glossary",
+        "bibliography",
+        "index",
+        "dedication",
+        "acknowledgement",
     ]
     non_chapters = {}
 
     for m in matches:
         kw = m["match"].group(1)
-        if kw and kw.strip().lower() in non_chapter_keywords:
+        if not kw:
+            continue
+        kw_lower = kw.strip().lower()
+        if kw_lower in non_chapter_keywords:
+
+            # Must occur before the first chapter
+            if kw_lower in ["introduction", "prologue", "foreword", "preface"]:
+                if (
+                    first_chapter_start is not None
+                    and m["start"] >= first_chapter_start
+                ):
+                    continue
+
+            # Must occur after the last chapter
+            if kw_lower in [
+                "conclusion",
+                "epilogue",
+                "afterword",
+                "appendix",
+                "addendum",
+                "glossary",
+                "bibliography",
+                "index",
+            ]:
+                if last_chapter_start is not None and m["start"] <= last_chapter_start:
+                    continue
+
+            # Dedication & Acknowledgement allowed before first OR after last chapter
+            if kw_lower in ["dedication", "acknowledgement"]:
+                if (
+                    first_chapter_start is not None
+                    and m["start"] >= first_chapter_start
+                ) and (
+                    last_chapter_start is not None and m["start"] <= last_chapter_start
+                ):
+                    continue
+
             key = kw.strip().capitalize()
             if key not in non_chapters:
                 non_chapters[key] = []
@@ -128,6 +185,7 @@ def split_chapters(audio_file, output_dir=None, model_size="base"):
 
     # Sort by start time
     matches.sort(key=lambda m: m["start"])
+
     chapters = []
     for idx, m in enumerate(matches):
         if m["match"].group(2):
@@ -154,7 +212,31 @@ def split_chapters(audio_file, output_dir=None, model_size="base"):
                 end = None  # fallback
         input_ext = os.path.splitext(audio_file)[1]
         output_filename = os.path.join(output_dir, f"{chapter_label}{input_ext}")
-        # ffmpeg command to extract segment
+        chapters.append(
+            {
+                "chapter": chapter_label,
+                "start": start,
+                "end": end,
+                "file": output_filename,
+            }
+        )
+
+    # Sort chapters numerically BEFORE exporting
+    def chapter_sort_key(ch):
+        match = re.match(r"Chapter (\d+)", ch["chapter"])
+        if match:
+            return int(match.group(1))
+        return 9999
+
+    chapters.sort(key=chapter_sort_key)
+
+    # Now export in sorted order
+    for ch in chapters:
+        start = ch["start"]
+        end = ch["end"]
+        output_filename = ch["file"]
+        chapter_label = ch["chapter"]
+
         if end is not None:
             duration = end - start
             ffmpeg_cmd = [
@@ -182,36 +264,19 @@ def split_chapters(audio_file, output_dir=None, model_size="base"):
                 "copy",
                 output_filename,
             ]
+
         start_min = int(start // 60)
         start_sec = int(start % 60)
         try:
             subprocess.run(
                 ffmpeg_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
             )
-            print(f"  ✔️   Exported: {chapter_label}: {start_min:02d}:{start_sec:02d}")
+            print(f"  ✅   Exported: {chapter_label}: {start_min:02d}:{start_sec:02d}")
         except subprocess.CalledProcessError as e:
             print(f"\n ❌ Error: ffmpeg failed for {chapter_label}: {e}\n\n")
             continue
-        chapters.append(
-            {
-                "chapter": chapter_label,
-                "start": start,
-                "end": end,
-                "file": output_filename,
-            }
-        )
 
-    if non_chapters:
-        print("\n=== Non-Chapter Occurrences ===")
-        for keyword, timestamps in non_chapters.items():
-            formatted_times = []
-            for t in timestamps:
-                start_min = int(t // 60)
-                start_sec = int(t % 60)
-                formatted_times.append(f"{start_min:02d}:{start_sec:02d}")
-            print(f" - '{keyword}':\t{', '.join(formatted_times)}")
-
-    return chapters
+    return chapters, non_chapters
 
 
 # Sort chapters into numerical order
@@ -221,6 +286,7 @@ def sort_chapters_numerically(s):
     ]
 
 
+# Handle awkward characters in file names
 def replace_special_characters(audio_dir, original_files):
     for i, filename in enumerate(original_files):
         if "'" in filename:
@@ -564,14 +630,29 @@ def main():
     os.makedirs(audio_dir, exist_ok=True)
 
     # Extract chapters from orignal single audio file
-    chapters = split_chapters(audio_file, output_dir=audio_dir)
+    chapters, non_chapters = split_chapters(audio_file, output_dir=audio_dir)
 
     print(
-        f"\n - Chapters 1 thru {str(len(chapters))} have been extracted.\n    Non-chapters will need to be extracted manually."
+        f"\n Chapters 1 through {str(len(chapters))} have been extracted successfully."
     )
-    time.sleep(10)
 
-    input("    Press any key to continue...\n")
+    if len(non_chapters) > 0:
+        print(
+            "\n   Manual extraction is required for non-chapters.\n    === Potential non-chapter occurrences ==="
+        )
+        for keyword, timestamps in non_chapters.items():
+            formatted_times = []
+            for t in timestamps:
+                start_min = int(t // 60)
+                start_sec = int(t % 60)
+                formatted_times.append(f"{start_min:02d}:{start_sec:02d}")
+            print(f"   - '{keyword}':\t{', '.join(formatted_times)}")
+        time.sleep(20)
+        print()
+
+        input("    Press any key to continue...\n")
+
+    time.sleep(2)
     subprocess.Popen(["clear"])
     time.sleep(0.1)
 
