@@ -27,8 +27,10 @@ def error_checking(audio_dir, audio_file):
         print(f"\n ❌ Error: '{audio_file}' does not exist.\n\n")
         sys.exit(1)
 
-    if not f"{audio_file.split(".")[0]}.jpg" in str(os.listdir(".")):
-        print(f"\n ❌ Error: Book cover could not be found.\n\n")
+    if not os.path.exists(f"{audio_file.split(".")[0]}.jpg"):
+        print(
+            f"\n ❌ Error: Book cover '{audio_file.split(".")[0]}.jpg' could not be found.\n\n"
+        )
         sys.exit(1)
 
     return f"{audio_file.split(".")[0]}.jpg"
