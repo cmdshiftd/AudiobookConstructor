@@ -19,14 +19,8 @@ def error_checking(audio_dir, audio_file):
         print(f"\n ❌ Error: Directory '{audio_dir}' already exists.\n\n")
         sys.exit(1)
 
-    if not os.path.isfile(audio_file):
-        print(f"\n ❌ Error: '{audio_file}' does not exist.\n\n")
-        sys.exit(1)
-
-    if audio_file in str(os.listdir(".")):
-        pass
-    else:
-        print(f"\n ❌ Error: '{audio_file}' does not exist.\n\n")
+    if audio_file not in str(os.listdir(".")) and not os.path.isfile(audio_file):
+        print(f"\n ❌ Error: The audio file '{audio_file}' does not exist.\n\n")
         sys.exit(1)
 
     if not os.path.exists(f"{audio_file.split(".")[0]}.jpg"):
