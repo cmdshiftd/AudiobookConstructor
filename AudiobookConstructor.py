@@ -480,13 +480,13 @@ def add_metadata(
 
 def back_up(audio_dir, audio_file):
     # Copy Audiobook file
-    shutil.copy(
-        f"{audio_file.split(".")[0]}.m4b",
+    shutil.copy2(
         os.path.join(f"{audio_dir}", f"{audio_file.split(".")[0]}.m4b"),
+        f"{audio_file.split(".")[0]}.m4b",
     )
 
     # Copy chapter_titles
-    shutil.copy(
+    shutil.copy2(
         "chapter_titles.txt",
         os.path.join(f"{audio_dir}", "chapter_titles.txt"),
     )
@@ -506,6 +506,10 @@ def back_up(audio_dir, audio_file):
 
 # Cleanup temporary files
 def clean_up(audio_dir, audio_file):
+    for textfile in os.listdir(audio_dir):
+        if textfile.endswith(".txt"):
+            os.remove(os.path.join(audio_dir, textfile))
+
     back_up(audio_dir, audio_file)
 
     with zipfile.ZipFile(
