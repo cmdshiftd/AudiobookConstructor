@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -51,7 +52,7 @@ def load_chapter_titles(filename="chapter_titles.txt"):
 # Identify occurances of chapter titles
 def find_sections(
     audio_file,
-    pattern=r"(chapter (\d+)|introduction|conclusion|prologue|epilogue|foreword|afterword)",
+    pattern=r"(chapter (\d+)|introduction|conclusion|prologue|epilogue|foreword|afterword|dedication|acknowledgement|appendix|addendum|glossary|bibliography|index|preface)",
     model_size="base",
 ):
     # Transcribe the audio file and return matches of the regex pattern.
@@ -417,20 +418,35 @@ def add_metadata(
     os.replace(temp_final_file, output_file)
 
 
-# Cleanup temporary files
-def clean_up(audio_dir):
-    os.rename(os.path.join(audio_dir, f"{audio_dir}.m4b"), f"{audio_dir}.m4b")
+def back_up(audio_dir, audio_file):
+    # Copy Audiobook file
+    shutil.copy(
+        f"{audio_file.split(".")[0]}.m4b",
+        os.path.join(f"{audio_dir}", f"{audio_file.split(".")[0]}.m4b"),
+    )
 
-    for book_file in os.listdir(audio_dir):
-        if os.path.isfile(os.path.join(audio_dir, book_file)) and (
-            not book_file.endswith(".m4b")
-            and not book_file.endswith(".m4a")
-            and not book_file.endswith(".mp3")
-            and not book_file.endswith(".zip")
-            and not book_file.endswith(".epub")
-            and not book_file.endswith(".pdf")
-        ):
-            os.remove(os.path.join(audio_dir, book_file))
+    # Copy chapter_titles
+    shutil.copy(
+        "chapter_titles.txt",
+        os.path.join(f"{audio_dir}", "chapter_titles.txt"),
+    )
+
+    # Copy original file
+    os.rename(
+        f"{audio_file}",
+        os.path.join(f"{audio_dir}", f"{audio_file}"),
+    )
+
+    # Copy book cover
+    os.rename(
+        f"{audio_file.split(".")[0]}.jpg",
+        os.path.join(f"{audio_dir}", f"{audio_file.split(".")[0]}.jpg"),
+    )
+
+
+# Cleanup temporary files
+def clean_up(audio_dir, audio_file):
+    back_up(audio_dir, audio_file)
 
     with zipfile.ZipFile(
         os.path.join(f"{os.path.basename(audio_dir)}.orig.zip"),
@@ -451,6 +467,7 @@ def convert_mp3(
     filelist,
     chapters,
     audio_dir,
+    audio_file,
     book_cover,
     total_duration,
     files,
@@ -526,15 +543,12 @@ def convert_mp3(
                 pbar.write(f"  ✔️   {base_name}")
 
     add_metadata(audio_dir, book_cover, chapters, output_file, concat_list_path, author)
-    clean_up(audio_dir)
+    clean_up(audio_dir, audio_file)
 
 
 def main():
     subprocess.Popen(["clear"])
     time.sleep(0.1)
-
-    with open("timestamps", "w") as ts:
-        ts.write(f"Script started: {str(datetime.now())}\n")
 
     if len(sys.argv) < 3:
         print("Usage: python3 AudiobookConstructor_new.py <audiobook_file> <author>")
@@ -552,9 +566,6 @@ def main():
     # Extract chapters from orignal single audio file
     chapters = split_chapters(audio_file, output_dir=audio_dir)
 
-    with open("timestamps", "a") as ts:
-        ts.write(f"Chapters extracted: {str(datetime.now())}\n")
-
     print(
         f"\n - Chapters 1 thru {str(len(chapters))} have been extracted.\n    Non-chapters will need to be extracted manually."
     )
@@ -563,9 +574,6 @@ def main():
     input("    Press any key to continue...\n")
     subprocess.Popen(["clear"])
     time.sleep(0.1)
-
-    with open("timestamps", "a") as ts:
-        ts.write(f"Begin conversion: {str(datetime.now())}\n")
 
     # Begin conversion and amalgamation of extracted chapters into single m4b file
     files = []
@@ -598,6 +606,7 @@ def main():
             filelist,
             chapters,
             audio_dir,
+            audio_file,
             book_cover,
             total_duration,
             files,
@@ -614,9 +623,6 @@ def main():
         sys.exit(1)
 
     print(f"\n Completed conversion for '{audio_dir.split('/')[-1]}'\n\n\n")
-
-    with open("timestamps", "a") as ts:
-        ts.write(f"Completed conversion: {str(datetime.now())}\n")
 
 
 if __name__ == "__main__":
