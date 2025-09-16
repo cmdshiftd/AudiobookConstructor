@@ -524,6 +524,8 @@ def clean_up(audio_dir, audio_file):
                     arcname=os.path.relpath(os.path.join(root, file), audio_dir),
                 )
 
+    shutil.rmtree(audio_dir)
+
 
 # Convert mp3 files to m4a, then concatenate with chapters metadata into m4b
 def convert_mp3(
@@ -604,7 +606,7 @@ def convert_mp3(
                 eta_str = f"{eta_minutes}m {eta_seconds}s"
 
                 pbar.set_postfix({"Progress": f"{percentage:.1f}%", "ETA": eta_str})
-                pbar.write(f"  ✔️   {base_name}")
+                pbar.write(f"  ✅   {base_name}")
 
     add_metadata(audio_dir, book_cover, chapters, output_file, concat_list_path, author)
     clean_up(audio_dir, audio_file)
@@ -644,7 +646,7 @@ def main():
                 start_min = int(t // 60)
                 start_sec = int(t % 60)
                 formatted_times.append(f"{start_min:02d}:{start_sec:02d}")
-            print(f"   - '{keyword}':\t{', '.join(formatted_times)}")
+            print(f"    - '{keyword}':\t{', '.join(formatted_times)}")
         time.sleep(20)
         print()
 
