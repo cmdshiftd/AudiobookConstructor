@@ -23,6 +23,10 @@ def error_checking(audio_dir, audio_file):
         print(f"\n ❌ Error: The audio file '{audio_file}' does not exist.\n\n")
         sys.exit(1)
 
+    if not audio_file.endswith(".mp3"):
+        print(f"\n ❌ Error: The audio file does not have an mp3 extension.\n\n")
+        sys.exit(1)
+
     if not os.path.exists(f"{audio_file.split(".")[0]}.jpg"):
         print(
             f"\n ❌ Error: Book cover '{audio_file.split(".")[0]}.jpg' could not be found.\n\n"
@@ -697,10 +701,8 @@ def main():
             output_file,
             concat_list_path,
         )
-    elif codec == "aac":
-        pass
     else:
-        print(f"File codec for {audio_dir} is {codec} and not supported.")
+        print(f"File codec for {audio_dir} is not mp3 and is not supported.")
         sys.exit(1)
 
     print(f"\n Completed conversion for '{audio_dir.split('/')[-1]}'\n\n\n")

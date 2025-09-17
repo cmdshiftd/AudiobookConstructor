@@ -1,5 +1,5 @@
 # AudiobookConstructor
-Make audiobooks from existing individual audio files, as easy as Ab-C!
+Make audiobooks from a single MP3, as easy as Ab-C!
 
 
 ## Installation
@@ -9,13 +9,13 @@ Install/build [FFmpeg](https://ffmpeg.org) for your platform.<br>
 
 ## Usage
 
-`python3 AudiobookConstructor.py <audiobook_directory/title> <author>`
+`python3 AudiobookConstructor.py <audiobook_directory/title>.mp3 <author>`
 
 <br>
 
 ### Example
 
-`python3 AudiobookConstructor.py "Harry Potter and the Philosopher's Stone" "J. K. Rowling"`
+`python3 AudiobookConstructor.py "Harry Potter and the Philosopher's Stone.mp3" "J. K. Rowling"`
 
 <br>
 
@@ -32,9 +32,3 @@ You will have to extract segments such as Introduction, Epilogue, Foreword or Af
 * Chapter 0.1 - Foreword
 * Chapter (Last+1) - Afterword
 <br><br>
-
-<!-- _**Note**: The processing time will often roughly equate to the length of the audio file._ -->
-
-## Support Formats
-* mp3<br>
-<!-- * m4a<br> -->
