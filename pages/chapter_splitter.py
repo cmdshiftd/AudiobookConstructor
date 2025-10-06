@@ -38,6 +38,9 @@ def find_sections(
     regex = re.compile(pattern, re.IGNORECASE)
     matches = []
 
+    # Debug: collect segments that might be chapters
+    debug_segments = []
+
     for seg in result["segments"]:
         # Progress reporting
         if total_duration:
@@ -46,6 +49,10 @@ def find_sections(
             ss = int(seg["end"] % 60)
             print(f"Progress: {progress:.0f}% ({mm:02d}:{ss:02d})")
         text = seg["text"]
+
+        # Debug: check for any mention of "chapter" or just numbers
+        if re.search(r'\bchapter\b|\b(one|two|three|four|five|1|2|3|4|5)\b', text, re.IGNORECASE):
+            debug_segments.append((seg["start"], text.strip()))
 
         for match in regex.finditer(text):
             matches.append(
@@ -56,6 +63,16 @@ def find_sections(
                     "match": match,
                 }
             )
+            # Debug output
+            print(f"  Found: '{match.group(0)}' at {int(seg['start']//60):02d}:{int(seg['start']%60):02d}")
+
+    # Debug: show potential chapter segments
+    if not matches and debug_segments:
+        print("\n  Debug: Found segments containing 'chapter' or numbers (first 10):")
+        for start, text in debug_segments[:10]:
+            mm = int(start // 60)
+            ss = int(start % 60)
+            print(f"    {mm:02d}:{ss:02d} - {text}")
 
     # Sort matches by start time
     matches.sort(key=lambda m: m["start"])
@@ -136,21 +153,23 @@ def find_sections(
 
 
 def split_chapters(audio_file, output_dir=None, model_size="base", use_titles=True):
-    """
+    r"""
     Splits the audio file into chapters based on 'chapter (\d+)' markers.
     Returns a list of dicts with chapter number, start time, end time, and output file.
     """
     if output_dir is None:
         output_dir = os.path.dirname(os.path.abspath(audio_file))
-    os.makedirs(output_dir, exist_ok=True)
 
     pattern = r"(chapter (\d+)|introduction|prologue|epilogue|preface|conclusion)"
     matches, result, non_chapters = find_sections(
         audio_file, pattern=pattern, model_size=model_size
     )
     if not matches:
-        print("No chapter markers found.")
-        return []
+        print("\n ⚠️  No chapter markers found in the audio file.")
+        print("   Will convert as a single audiobook file without chapters.\n")
+        return [], non_chapters
+
+    os.makedirs(output_dir, exist_ok=True)
 
     titles = load_chapter_titles() if use_titles else []
     seen_chapters = set()
@@ -201,6 +220,12 @@ def split_chapters(audio_file, output_dir=None, model_size="base", use_titles=Tr
         return 9999
 
     chapters.sort(key=chapter_sort_key)
+
+    # Check if any actual chapters were found
+    if not chapters:
+        print("\n ⚠️  No numbered chapters found in the audio file.")
+        print("   Will convert as a single audiobook file without chapters.\n")
+        return [], non_chapters
 
     # Now export in sorted order
     for ch in chapters:

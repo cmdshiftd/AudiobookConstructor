@@ -93,12 +93,22 @@ def generate_lists(audio_dir, original_files):
     start = 0
     with open(chapters, "w") as chapterstxt:
         chapterstxt.write(";FFMETADATA1\n")
-        for _, fn in enumerate(original_files, 1):
-            end = start + get_duration(os.path.join(audio_dir, fn))
+
+        # If only one file, create a single chapter with the book title
+        if len(original_files) == 1:
+            end = total_duration
+            title = os.path.basename(audio_dir)  # Use audiobook name as chapter title
             chapterstxt.write(
-                f"[CHAPTER]\nTIMEBASE=1/1000\nSTART={start}\nEND={end}\ntitle={fn.replace(' - ', ': ')}\n\n"
+                f"[CHAPTER]\nTIMEBASE=1/1000\nSTART={start}\nEND={end}\ntitle={title}\n\n"
             )
-            start = end
+        else:
+            # Multiple chapters - use filenames as titles
+            for _, fn in enumerate(original_files, 1):
+                end = start + get_duration(os.path.join(audio_dir, fn))
+                chapterstxt.write(
+                    f"[CHAPTER]\nTIMEBASE=1/1000\nSTART={start}\nEND={end}\ntitle={fn.replace(' - ', ': ')}\n\n"
+                )
+                start = end
 
     return filelist, chapters, total_duration, concat_list_path
 
@@ -127,7 +137,7 @@ def re_encode(concat_list_path, output_file):
 
 
 def add_metadata(
-    audio_dir, book_cover, chapters, output_file, concat_list_path, author=None
+    audio_dir, book_cover, chapters, output_file, concat_list_path, author=None, has_chapters=True
 ):
     """Add chapters metadata into a new file (ffmpeg cannot edit in-place)."""
     final_file = os.path.join(audio_dir, f"{os.path.basename(audio_dir)}.m4b")
@@ -177,7 +187,10 @@ def add_metadata(
         ]
     )
 
-    print(f"\n Encoding, organising chapters and adding cover...")
+    if has_chapters:
+        print(f"\n Encoding, organising chapters and adding cover...")
+    else:
+        print(f"\n Encoding and adding cover...")
     re_encode(concat_list_path, output_file)
 
     chapter_command.append(temp_final_file)
@@ -270,4 +283,6 @@ def convert_mp3(
                 pbar.set_postfix({"Progress": f"{percentage:.1f}%", "ETA": eta_str})
                 pbar.write(f"  ✅   {base_name}")
 
-    add_metadata(audio_dir, book_cover, chapters, output_file, concat_list_path, author)
+    # Determine if we have multiple chapters or just one file
+    has_chapters = len(files) > 1
+    add_metadata(audio_dir, book_cover, chapters, output_file, concat_list_path, author, has_chapters)
