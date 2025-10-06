@@ -1,5 +1,7 @@
 # AudiobookConverter
-TEST/*
+*.mp3
+*.jpg
+*.text
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
